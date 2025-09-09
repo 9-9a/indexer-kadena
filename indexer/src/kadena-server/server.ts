@@ -85,12 +85,6 @@ const typeDefs = readFileSync(join(__dirname, './config/schema.graphql'), 'utf-8
 const KADENA_GRAPHQL_API_PORT = process.env.KADENA_GRAPHQL_API_PORT ?? '3001';
 
 /**
- * Array of domains allowed to access the GraphQL API
- */
-
-const ALLOWED_ORIGINS = getArrayEnvString('ALLOWED_ORIGINS');
-
-/**
  * Apollo Server plugin that validates pagination parameters in GraphQL requests
  *
  * This plugin enforces the Relay Connection Specification for cursor-based pagination
@@ -212,36 +206,6 @@ const securitySanitizationPlugin: ApolloServerPlugin = {
       }
     },
   }),
-};
-
-/**
- * Checks if an origin is allowed to access the GraphQL API
- *
- * Implements CORS policy by validating origin domains against the allowed list.
- * Permits localhost for development and allows both exact matches and subdomains
- * of kadena.io.
- *
- * @param origin - The origin domain requesting access
- * @returns Boolean indicating if the origin is allowed
- */
-const isAllowedOrigin = (origin: string): boolean => {
-  try {
-    const originUrl = new URL(origin);
-    if (originUrl.hostname === 'localhost') return true;
-
-    return ALLOWED_ORIGINS.some(allowed => {
-      const allowedUrl = new URL(allowed);
-      // Check if it's an exact match
-      if (originUrl.origin === allowedUrl.origin) return true;
-      // Check if it's a subdomain (only for kadena.io)
-      if (allowedUrl.hostname === 'kadena.io' && originUrl.hostname.endsWith('.kadena.io')) {
-        return true;
-      }
-      return false;
-    });
-  } catch {
-    return false;
-  }
 };
 
 /**
@@ -515,20 +479,6 @@ export async function startGraphqlServer() {
   app.use(
     '/graphql',
     cors<cors.CorsRequest>({
-      origin: (origin, callback) => {
-        if (!origin || origin === 'null') {
-          return callback(null, false);
-        }
-
-        try {
-          if (isAllowedOrigin(origin)) {
-            return callback(null, true);
-          }
-          return callback(new Error(`[ERROR][CORS][ORIGIN] Origin ${origin} not allowed by CORS`));
-        } catch (error) {
-          return callback(null, false);
-        }
-      },
       methods: ['POST', 'OPTIONS'],
       allowedHeaders: [
         'Content-Type',
@@ -547,42 +497,6 @@ export async function startGraphqlServer() {
       context: createGraphqlContext,
     }),
   );
-
-  /**
-   * Handle CORS preflight OPTIONS requests explicitly
-   *
-   * This endpoint manages the CORS preflight requests that browsers send before making
-   * actual API requests. It's a critical security component that:
-   *
-   * 1. Validates the origin against the allowed domains list
-   * 2. Sets appropriate CORS headers when origins are allowed:
-   *    - Access-Control-Allow-Origin: Reflects the allowed origin
-   *    - Access-Control-Allow-Credentials: Enables authenticated requests
-   *    - Access-Control-Allow-Methods: Limits to POST and OPTIONS methods
-   *    - Access-Control-Allow-Headers: Specifies allowed request headers
-   *    - Access-Control-Max-Age: Caches preflight result for 24 hours (86400s)
-   * 3. Returns 204 No Content for allowed origins or 403 Forbidden for disallowed ones
-   *
-   * This explicit handling ensures precise control over cross-origin security,
-   * preventing unauthorized domains from accessing the API while allowing
-   * legitimate client applications to function properly.
-   */
-  app.options('*', (req: Request, res: Response) => {
-    const origin = req.headers.origin;
-    if (origin && isAllowedOrigin(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Accept, Origin, X-Requested-With, Cache-Control, Pragma',
-      );
-      res.setHeader('Access-Control-Max-Age', '86400');
-      res.status(204).end();
-    } else {
-      res.status(403).end();
-    }
-  });
 
   /**
    * Handle 404 Not Found errors for all other routes
