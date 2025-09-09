@@ -53,7 +53,7 @@ const SYNC_NETWORK = getRequiredEnvString('SYNC_NETWORK');
 export async function startStreaming() {
   console.info('[INFO][WORKER][BIZ_FLOW] Starting blockchain streaming service ...');
 
-  await startMissingBlocksBeforeStreamingProcess();
+  // await startMissingBlocksBeforeStreamingProcess();
 
   const nextBlocksToProcess: any[] = [];
   const blocksRecentlyProcessed = new Set<string>();
@@ -78,7 +78,7 @@ export async function startStreaming() {
   // Handle connection errors
   eventSource.onerror = (error: any) => {
     // TODO: [RETRY-OPTIMIZATION] Consider adding retry/backoff or a reconnect strategy; at minimum emit a metric.
-    console.error('[ERROR][NET][CONN_LOST] EventSource connection error', { error });
+    console.error('[ERROR][NET][CONN_LOST] EventSource connection error', error);
   };
 
   const processBlock = async (block: any) => {
@@ -98,18 +98,18 @@ export async function startStreaming() {
       // TODO: [CONSISTENCY] Validate saveBlock result; if null/failed, handle with rollback + DLQ + metric to avoid partial commits
       await saveBlock({ header: block.header, payload, canonical: null }, tx);
 
-      if (!initialChainGapsAlreadyFilled.has(block.header.chainId)) {
-        initialChainGapsAlreadyFilled.add(block.header.chainId);
-        await fillChainGapsBeforeDefiningCanonicalBaseline({
-          chainId: block.header.chainId,
-          lastHeight: block.header.height,
-          tx,
-        });
-      }
+      // if (!initialChainGapsAlreadyFilled.has(block.header.chainId)) {
+      //   initialChainGapsAlreadyFilled.add(block.header.chainId);
+      //   await fillChainGapsBeforeDefiningCanonicalBaseline({
+      //     chainId: block.header.chainId,
+      //     lastHeight: block.header.height,
+      //     tx,
+      //   });
+      // }
 
       await tx.commit();
 
-      await defineCanonicalInStreaming(block.header.hash);
+      // await defineCanonicalInStreaming(block.header.hash);
       blocksRecentlyProcessed.add(blockIdentifier);
     } catch (error) {
       await tx.rollback();
@@ -265,7 +265,7 @@ export async function saveBlock(
     // Process the block's transactions and events
     return processPayloadKey(createdBlock, payloadData, tx);
   } catch (error) {
-    console.error(`[ERROR][DB][DATA_CORRUPT] Failed to save block to database:`, error);
+    console.error('[ERROR][DB][DATA_CORRUPT] Failed to save block to database:', error);
     return null;
   }
 }
