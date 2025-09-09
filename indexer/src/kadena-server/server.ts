@@ -22,7 +22,7 @@ import './plugins/instrument';
 import { ApolloServer, ApolloServerPlugin } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
 import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer';
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import http from 'http';
 import cors from 'cors';
 import { resolvers } from './resolvers';
@@ -477,6 +477,30 @@ export async function startGraphqlServer() {
     },
     wsServer,
   );
+
+  /**
+   * Middleware to handle malformed URIs before they cause URIError
+   *
+   * This middleware intercepts requests with potentially malformed URIs and validates
+   * them before Express tries to decode them. It prevents URIError exceptions by
+   * catching malformed URLs early and returning a proper 400 Bad Request response.
+   */
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Test if the URL can be properly decoded
+      decodeURIComponent(req.url);
+      next();
+    } catch (error) {
+      if (error instanceof URIError) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: 'Malformed URI',
+        });
+      }
+      next(error);
+    }
+  });
+
   app.use(express.json());
 
   /**
@@ -486,7 +510,7 @@ export async function startGraphqlServer() {
    * This endpoint can be used by load balancers, monitoring tools, and
    * container orchestration platforms to verify service availability.
    */
-  app.get('/health', (req: Request, res: Response) => {
+  app.get('/health', (_req: Request, res: Response) => {
     res.status(200).json({ status: 'OK' });
   });
 
@@ -561,6 +585,18 @@ export async function startGraphqlServer() {
     } else {
       res.status(403).end();
     }
+  });
+
+  /**
+   * Handle 404 Not Found errors for all other routes
+   *
+   * This middleware catches all requests that don't match any other routes
+   * and returns a 404 Not Found response. It's a critical component of the
+   * error handling system that ensures clients receive clear feedback when
+   * accessing non-existent resources.
+   */
+  app.get('/*', (_req: Request, res: Response) => {
+    res.status(404).end();
   });
 
   // Initialize cache and start the server
