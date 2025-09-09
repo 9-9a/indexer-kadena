@@ -81,7 +81,10 @@ export function initializeErrorMonitoring(): void {
   const reporter = new HttpErrorReporter(monitoringUrl, apiKey);
   const originalConsoleError = console.error.bind(console);
 
-  const classifySeverity = (message: string, extra: unknown): 'major' | 'degraded' | 'minimal' => {
+  const classifySeverity = (
+    message: string,
+    extra: unknown,
+  ): 'major' | 'degraded' | 'minimal' | 'none' => {
     const msg = (message || '').toLowerCase();
     const extraText = (() => {
       try {
@@ -130,7 +133,32 @@ export function initializeErrorMonitoring(): void {
     ];
     if (degradedHints.some(h => hay.includes(h))) return 'degraded';
 
-    return 'minimal';
+    // Minimal (Severity 3) — explicit low-impact signals per table
+    const minimalHints = [
+      // Minor parsing, non-standard cases
+      'minor parsing',
+      'non standard',
+      'non-standard',
+      // Occasional transient/slow behavior, small impact
+      'transient',
+      'slow query',
+      'slow queries',
+      'occasionally retry',
+      'occasional retry',
+      // Small gaps / less critical segments
+      'small gaps',
+      'less critical',
+      'less-critical',
+      // Logging/audit minor issues
+      'minor formatting',
+      'sporadic log gaps',
+      'log gaps',
+      'formatting issue',
+    ];
+    if (minimalHints.some(h => hay.includes(h))) return 'minimal';
+
+    // Default fallback if no category matched
+    return 'none';
   };
 
   console.error = (...args: unknown[]) => {
