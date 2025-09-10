@@ -13,12 +13,6 @@ import Transaction from '@/models/transaction';
 
 type TokenAmount = number | { decimal: string };
 
-// Cache for token prices in USD
-interface TokenPriceCache {
-  price: number;
-  timestamp: number;
-}
-
 interface CreatePairParams {
   moduleName: string;
   name: string;
@@ -40,9 +34,6 @@ interface TokenReference {
 }
 
 export class PairService {
-  private static tokenPriceCache: Map<number, TokenPriceCache> = new Map();
-  private static readonly PRICE_CACHE_TTL = parseInt(process.env.PRICE_CACHE_TTL || '300000', 10); // Default 5 minutes
-
   /**
    * Formats a number to exactly 8 decimal places
    * @param value The number to format
@@ -191,19 +182,9 @@ export class PairService {
     tx?: SequelizeTransaction | undefined,
     protocolAddress = DEFAULT_PROTOCOL,
   ): Promise<number | undefined> {
-    const now = Date.now();
-    const cached = this.tokenPriceCache.get(token.id);
-
-    // Return cached price if it's still valid
-    if (cached && now - cached.timestamp < this.PRICE_CACHE_TTL) {
-      return cached.price;
-    }
-
     // Calculate new price
     const price = await this.calculateTokenPriceInUSD(token, { decimal: '1' }, tx, protocolAddress);
-    if (price !== undefined) {
-      this.tokenPriceCache.set(token.id, { price, timestamp: now });
-    }
+
     return price;
   }
 
