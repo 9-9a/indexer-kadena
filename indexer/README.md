@@ -57,7 +57,6 @@ cp indexer/.env.template indexer/.env
 | `DB_SSL_ENABLED`          | Enable/disable SSL for database         | `true` or `false`                       |
 | `KADENA_GRAPHQL_API_PORT` | GraphQL API port                        | `3000`                                  |
 | `SENTRY_DSN`              | Sentry url to monitor indexer usage     | `https://123.ingest.us.sentry.io/123`   |
-| `ALLOWED_ORIGINS`         | Allowed origins for CORS                | `http://abcde:3001,http://abcde:3002`   |
 | `PRICE_CACHE_TTL`         | Time-to-live for price cache in seconds | `300`                                   |
 
 **NOTE:** The example Kadena node API from chainweb will not work for the indexer purpose. You will need to run your own Kadena node and set the `NODE_API_URL` to your node's API URL.
