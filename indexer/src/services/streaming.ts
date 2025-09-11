@@ -98,18 +98,18 @@ export async function startStreaming() {
       // TODO: [CONSISTENCY] Validate saveBlock result; if null/failed, handle with rollback + DLQ + metric to avoid partial commits
       await saveBlock({ header: block.header, payload, canonical: null }, tx);
 
-      // if (!initialChainGapsAlreadyFilled.has(block.header.chainId)) {
-      //   initialChainGapsAlreadyFilled.add(block.header.chainId);
-      //   await fillChainGapsBeforeDefiningCanonicalBaseline({
-      //     chainId: block.header.chainId,
-      //     lastHeight: block.header.height,
-      //     tx,
-      //   });
-      // }
+      if (!initialChainGapsAlreadyFilled.has(block.header.chainId)) {
+        initialChainGapsAlreadyFilled.add(block.header.chainId);
+        await fillChainGapsBeforeDefiningCanonicalBaseline({
+          chainId: block.header.chainId,
+          lastHeight: block.header.height,
+          tx,
+        });
+      }
 
       await tx.commit();
 
-      // await defineCanonicalInStreaming(block.header.hash);
+      await defineCanonicalInStreaming(block.header.hash);
       blocksRecentlyProcessed.add(blockIdentifier);
     } catch (error) {
       await tx.rollback();
