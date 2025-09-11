@@ -610,12 +610,6 @@ export default class BlockDbRepository implements BlockRepository {
       [eventIds],
     );
 
-    if (blockRows.length !== eventIds.length) {
-      throw new Error(
-        `[ERROR][DB][DATA_CORRUPT] Fetched blocks count (${blockRows.length}) does not match event IDs count (${eventIds.length}).`,
-      );
-    }
-
     const blockMap = blockRows.reduce(
       (acum, row) => ({
         ...acum,
@@ -663,12 +657,6 @@ export default class BlockDbRepository implements BlockRepository {
       [transactionIds],
     );
 
-    if (blockRows.length !== transactionIds.length) {
-      throw new Error(
-        `[ERROR][DB][DATA_CORRUPT] Fetched blocks count (${blockRows.length}) does not match transaction IDs count (${transactionIds.length}).`,
-      );
-    }
-
     const blockMap = blockRows.reduce(
       (acum, row) => ({
         ...acum,
@@ -713,12 +701,6 @@ export default class BlockDbRepository implements BlockRepository {
         WHERE b.hash = ANY($1::text[])`,
       [hashes],
     );
-
-    if (blockRows.length !== hashes.length) {
-      throw new Error(
-        `[ERROR][DB][DATA_CORRUPT] Fetched blocks count (${blockRows.length}) does not match requested hashes count (${hashes.length}).`,
-      );
-    }
 
     const blockMap = blockRows.reduce(
       (acum, row) => ({
