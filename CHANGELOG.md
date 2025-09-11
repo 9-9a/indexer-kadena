@@ -1,5 +1,41 @@
 # Changelog
 
+## Aug 13 - Sep 11, 2025
+
+- fix: remove unnecessary error throwing in dataloaders
+- refactor: removed CORS origin handler
+- fix: remove token price cache, causing inaccurate usd prices
+- feat: added errors monitoring for Kadena report
+- fix: liquidity can be object or number
+- fix: reverted orphan blocks algorithm behavior
+- refactor: changed indexes approach and graphql resolvers to make transfers query faster for all use cases
+- fix: tvl history query to better capture daily tvl values
+- refactor: improved transactions count when using minHeight and maxHeight
+- fix: added hasTokenId to all transfers fields and their counters
+- feat: add optional code field to TransactionSummary and related repository updates
+- refactor: improved blocks-from-height query
+- feat: optional port for migration
+- fix: created a missing migration to add an index on the module and chainId columns in the Events table
+- feat: added module as a new param in events query and improved the indexes to make the query performance better
+- fix: dex metrics tvl history query
+- refactor: transactions query improvement
+- refactor: separated pairCreation process from indexing
+- feat: created a query to get the token price based on its latest swap
+- feat: allowing to query holders of certain fungible module
+- fix: manually upsert poolstats to not overwrite db transaction
+- fix: added badResult field to the transactions-by-pact-code query and changed the creationTime field to DateTime type
+- fix: created a migration to add an index on the code column in the TransactionDetails table
+- refactor: added token id field in the transfers query for the case where isNft = true
+- refactor: started to track RECONCILE events and transform them in NFT transfers
+- refactor: changed the totalGasUsed field name to totalGasUsedInKda
+- refactor: created the transactionsByPactCode query to avoid performance issues
+- feat: balances queries
+- feat: added counters to the network info query
+- feat: added total count in blocksFromHeight query
+- fix: adjusted orphaned transactions field to use the canonical flag
+- feat: added total gas used in block type of graphql
+- tests: improved api parity tests to use random block hashes in queries like block, transactions, transfers and events
+
 ## Jul 28 - Aug 13, 2025
 
 - refactor: removed unnecessary environment variables and made some previously required variables optional
