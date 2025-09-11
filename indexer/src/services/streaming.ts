@@ -73,7 +73,7 @@ export async function startStreaming() {
   // Handle connection errors
   eventSource.onerror = (error: any) => {
     // TODO: [RETRY-OPTIMIZATION] Consider adding retry/backoff or a reconnect strategy; at minimum emit a metric.
-    console.error('[ERROR][NET][CONN_LOST] EventSource connection error', { error });
+    console.error('[ERROR][NET][CONN_LOST] EventSource connection error', error);
   };
 
   const processBlock = async (block: any) => {
@@ -270,7 +270,7 @@ export async function saveBlock(
     // Process the block's transactions and events
     return processPayloadKey(createdBlock, payloadData, tx);
   } catch (error) {
-    console.error(`[ERROR][DB][DATA_CORRUPT] Failed to save block to database:`, error);
+    console.error('[ERROR][DB][DATA_CORRUPT] Failed to save block to database:', error);
     return null;
   }
 }

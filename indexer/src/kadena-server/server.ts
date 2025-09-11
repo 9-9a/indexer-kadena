@@ -319,10 +319,7 @@ export async function startGraphqlServer() {
                 for (const err of ctx.errors) {
                   const path = Array.isArray(err.path) ? err.path.join('.') : '';
                   // Log full message first so monitoring puts it in data.error; details go in extra.args
-                  console.error(`[ERROR][GRAPHQL] ${err.message}`, {
-                    operation: op,
-                    path,
-                  });
+                  console.error(`[ERROR][GRAPHQL] ${err.message}`, { operation: op, path });
                 }
               } catch {
                 // no-op

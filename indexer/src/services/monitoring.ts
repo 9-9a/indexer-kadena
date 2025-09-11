@@ -1,4 +1,5 @@
 import axios from 'axios';
+import os from 'os';
 
 export type ReportErrorPayload = {
   endpoint: string;
@@ -50,8 +51,10 @@ class HttpErrorReporter implements ErrorReporter {
         headers: { 'Content-Type': 'application/json', 'x-api-key': this.apiKey },
         timeout: 30000,
       });
-    } catch {
-      console.error('[ERROR][MONITORING][REPORT_ERROR] Failed to report error:', error);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      err.message = `[ERROR][MONITORING][REPORT_ERROR] Failed to report error: ${err.message}`;
+      console.error(err);
     }
   }
 }
@@ -78,7 +81,10 @@ export function initializeErrorMonitoring(): void {
   const reporter = new HttpErrorReporter(monitoringUrl, apiKey);
   const originalConsoleError = console.error.bind(console);
 
-  const classifySeverity = (message: string, extra: unknown): 'major' | 'degraded' | 'minimal' => {
+  const classifySeverity = (
+    message: string,
+    extra: unknown,
+  ): 'major' | 'degraded' | 'minimal' | 'none' => {
     const msg = (message || '').toLowerCase();
     const extraText = (() => {
       try {
@@ -127,32 +133,137 @@ export function initializeErrorMonitoring(): void {
     ];
     if (degradedHints.some(h => hay.includes(h))) return 'degraded';
 
-    return 'minimal';
+    // Minimal (Severity 3) — explicit low-impact signals per table
+    const minimalHints = [
+      // Minor parsing, non-standard cases
+      'minor parsing',
+      'non standard',
+      'non-standard',
+      // Occasional transient/slow behavior, small impact
+      'transient',
+      'slow query',
+      'slow queries',
+      'occasionally retry',
+      'occasional retry',
+      // Small gaps / less critical segments
+      'small gaps',
+      'less critical',
+      'less-critical',
+      // Logging/audit minor issues
+      'minor formatting',
+      'sporadic log gaps',
+      'log gaps',
+      'formatting issue',
+    ];
+    if (minimalHints.some(h => hay.includes(h))) return 'minimal';
+
+    // Default fallback if no category matched
+    return 'none';
   };
 
   console.error = (...args: unknown[]) => {
     originalConsoleError(...args);
 
-    let message = 'Unknown error';
-    let extra: unknown;
+    // Normalize message and extra to centralize formatting
+    const firstError = args.find(a => a instanceof Error) as Error | undefined;
+    const firstString = args.find(a => typeof a === 'string') as string | undefined;
+    const allObjects = args.filter(
+      a => a !== null && typeof a === 'object' && !(a instanceof Error),
+    ) as Record<string, unknown>[];
 
-    if (args.length > 0) {
-      const first = args[0] as unknown;
-      if (first instanceof Error) {
-        message = first.message || 'Error';
-        extra = { stack: first.stack, ...(args[1] as object) };
-      } else if (typeof first === 'string') {
-        message = first as string;
-        if (args.length > 1) extra = { args: args.slice(1) };
-      } else {
-        try {
-          message = JSON.stringify(first);
-        } catch {
-          message = String(first);
-        }
-        if (args.length > 1) extra = { args: args.slice(1) };
+    let message = 'Unknown error';
+    let extra: Record<string, unknown> = {};
+    // Merge all non-Error context objects (shallow)
+    if (allObjects.length > 0) {
+      try {
+        extra = Object.assign({}, ...allObjects);
+      } catch {
+        // noop
       }
     }
+
+    if (firstError && firstString) {
+      message = `${firstString}: ${firstError.message || 'Error'}`;
+      if (firstError.stack) extra.stack = firstError.stack;
+    } else if (firstError) {
+      message = firstError.message || 'Error';
+      if (firstError.stack) extra.stack = firstError.stack;
+    } else if (firstString) {
+      message = firstString;
+    } else if (args.length > 0) {
+      try {
+        message = JSON.stringify(args[0]);
+      } catch {
+        message = String(args[0]);
+      }
+      if (args.length > 1) extra.args = args.slice(1) as unknown[];
+    }
+
+    // Compute raw error message (without tags/prefixes)
+    const rawErrorMessage = (() => {
+      if (firstError?.message) return firstError.message;
+      if (typeof firstString === 'string') {
+        // Strip bracket tags like [ERROR][CACHE] from the beginning
+        return firstString.replace(/^(?:\[[^\]]+\])+\s*/g, '').trim();
+      }
+      return typeof message === 'string' ? message : 'Error';
+    })();
+
+    // Attach runtime/env info
+    try {
+      (extra as Record<string, unknown>)['pid'] = process.pid;
+      (extra as Record<string, unknown>)['node'] = process.version;
+      (extra as Record<string, unknown>)['host'] = os.hostname();
+      (extra as Record<string, unknown>)['uptime'] = Math.round(process.uptime());
+    } catch {}
+
+    // Derive callsite (function, file, line, column) from stack (error or synthetic)
+    try {
+      const stackSource = firstError?.stack || new Error().stack || '';
+      const frames = stackSource.split('\n').map(s => s.trim());
+      const frame = frames.find(
+        f => f && !f.includes('services/monitoring') && (f.includes('at ') || f.includes('@')),
+      );
+      if (frame) {
+        // Patterns: "at fn (file:line:col)" or "at file:line:col"
+        const m = /at\s+(?:(?<fn>[^\s(]+)\s+\()?(?<loc>[^)]+)\)?/.exec(frame);
+        const loc = m?.groups?.loc ?? '';
+        const [filePath, line, column] = (() => {
+          const parts = loc.split(':');
+          if (parts.length >= 3) return [parts.slice(0, -2).join(':'), parts.at(-2), parts.at(-1)];
+          return [loc, undefined, undefined];
+        })();
+        (extra as any).function = m?.groups?.fn ?? undefined;
+        (extra as any).file = filePath;
+        if (line) (extra as any).line = Number(line);
+        if (column) (extra as any).column = Number(column);
+
+        // Phase derivation from file path
+        const phase = (() => {
+          const p = String(filePath || '').toLowerCase();
+          if (p.includes('/cache/')) return 'cache';
+          if (p.includes('/services/streaming')) return 'streaming';
+          if (p.includes('/services/payload') || p.includes('/models/') || p.includes('sequelize'))
+            return 'db';
+          if (p.includes('/kadena-server/')) return 'graphql';
+          if (p.includes('/services/price')) return 'price';
+          if (p.includes('/services/missing')) return 'missing';
+          if (p.includes('/services/define-canonical')) return 'canonical';
+          if (p.includes('/services/guards')) return 'guards';
+          return 'app';
+        })();
+        (extra as any).phase = phase;
+      }
+    } catch {}
+
+    // Derive tags from bracket prefixes in the string (if any)
+    try {
+      const tagSource = firstString || (typeof message === 'string' ? message : '');
+      const tags = Array.from(tagSource.matchAll(/\[([^\]]+)\]/g))
+        .map(m => m[1])
+        .filter(Boolean);
+      if (tags.length) (extra as any).tags = tags;
+    } catch {}
 
     // Ignore GraphQL-internal logs if requested (by tag)
     if (typeof message === 'string' && message.includes('[GRAPHQL]')) {
@@ -184,7 +295,7 @@ export function initializeErrorMonitoring(): void {
       instance,
       operation,
       error: message,
-      extra: extraWithSeverity,
+      extra: { ...(extraWithSeverity as Record<string, unknown>), message: rawErrorMessage },
     });
   };
 }
