@@ -57,7 +57,6 @@ cp indexer/.env.template indexer/.env
 | `DB_SSL_ENABLED`          | Enable/disable SSL for database         | `true` or `false`                       |
 | `KADENA_GRAPHQL_API_PORT` | GraphQL API port                        | `3000`                                  |
 | `SENTRY_DSN`              | Sentry url to monitor indexer usage     | `https://123.ingest.us.sentry.io/123`   |
-| `ALLOWED_ORIGINS`         | Allowed origins for CORS                | `http://abcde:3001,http://abcde:3002`   |
 | `PRICE_CACHE_TTL`         | Time-to-live for price cache in seconds | `300`                                   |
 
 **NOTE:** The example Kadena node API from chainweb will not work for the indexer purpose. You will need to run your own Kadena node and set the `NODE_API_URL` to your node's API URL.
@@ -166,7 +165,7 @@ yarn graphql:generate-types
 
 The Kadena Indexer project includes several types of tests to ensure the functionality and reliability of the codebase. Below are the instructions to run these tests:
 
-You can set your graphQL endpoint in the `.env.testing` file, otherwise it defaults to `localhost:3001`.
+You need to create a `.env.testing` on indexer folder using the `.template.env.testing` file as a guide.
 
 ### 6.1. Unit Tests
 
@@ -208,3 +207,17 @@ yarn test:smoke
 ```
 
 This command will start the necessary services using Docker Compose, wait for a few seconds to ensure they are up and running, execute the smoke tests located in `tests/docker/smoke.test.ts`, and then shut down the services.
+
+### 6.5. API Parity tests
+
+These tests were created to make sure the hack-a-chain API is consistent with the Kadena API. It generates a random list of hashes, query data in both APIs and compare the responses. Use this command to run them:
+
+```bash
+yarn test:api-parity
+```
+
+The tests will generate folders in the path indexer/tests/integration/api-parity/logs, where each folder represents a query (e.g., 001_block). Inside each of these folders, there will be additional folders named after the block hash. Each block hash folder will contain three files:
+
+- hackachain.json → Hackachain API response
+- kadena.json → Kadena API response
+- diffs.json → Differences between the two API responses

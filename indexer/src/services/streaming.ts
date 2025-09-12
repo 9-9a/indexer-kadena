@@ -21,14 +21,13 @@ import Block, { BlockAttributes } from '@/models/block';
 import { sequelize } from '@/config/database';
 import { backfillGuards } from './guards';
 import { Transaction } from 'sequelize';
-import { PriceUpdaterService } from './price/price-updater.service';
-import { defineCanonicalInStreaming } from '@/services/define-canonical';
+import { defineCanonicalBaseline } from '@/services/define-canonical';
 import {
   fillChainGapsBeforeDefiningCanonicalBaseline,
-  checkCanonicalPathForAllChains,
   startMissingBlocksBeforeStreamingProcess,
 } from '@/services/missing';
 import { EventAttributes } from '@/models/event';
+import { startPairCreation } from '@/services/start-pair-creation';
 
 const SYNC_BASE_URL = getRequiredEnvString('SYNC_BASE_URL');
 const SYNC_NETWORK = getRequiredEnvString('SYNC_NETWORK');
@@ -56,11 +55,7 @@ export async function startStreaming() {
   await startMissingBlocksBeforeStreamingProcess();
 
   const nextBlocksToProcess: any[] = [];
-  const blocksRecentlyProcessed = new Set<string>();
-  const initialChainGapsAlreadyFilled = new Set<string>();
-
-  // Initialize price updater
-  PriceUpdaterService.getInstance();
+  const initialChainGapsAlreadyFilled = new Set<number>();
 
   // Initialize EventSource connection to the blockchain node
   const eventSource = new EventSource(`${SYNC_BASE_URL}/${SYNC_NETWORK}/block/updates`);
@@ -77,23 +72,47 @@ export async function startStreaming() {
 
   // Handle connection errors
   eventSource.onerror = (error: any) => {
-    console.error('[ERROR][NET][CONN_LOST] EventSource connection error:', error);
+    // TODO: [RETRY-OPTIMIZATION] Consider adding retry/backoff or a reconnect strategy; at minimum emit a metric.
+    console.error('[ERROR][NET][CONN_LOST] EventSource connection error', error);
   };
 
   const processBlock = async (block: any) => {
-    const blockIdentifier = block.header.hash;
+    const blockHash = block.header.hash;
 
-    if (blocksRecentlyProcessed.has(blockIdentifier)) {
-      await defineCanonicalInStreaming(blockIdentifier);
+    let blockInDatabase: Block | null = null;
+    try {
+      blockInDatabase = await Block.findOne({ where: { hash: blockHash } });
+    } catch (error) {
+      console.error(
+        '[ERROR][DB][STREAMING] There was an error with the database:',
+        blockHash,
+        error,
+      );
+      process.exit(1);
+    }
+
+    if (blockInDatabase) {
+      await defineCanonicalBaseline(block.header.hash);
       return;
     }
 
-    const tx = await sequelize.transaction();
+    let tx: Transaction;
     try {
-      // Process the block payload (transactions, miner data, etc.)
+      tx = await sequelize.transaction();
+    } catch (error) {
+      console.error(
+        '[ERROR][DB][STREAMING] Failed to start transaction for new block:',
+        blockHash,
+        error,
+      );
+      return;
+    }
+
+    try {
       const payload = processPayload(block.payloadWithOutputs);
 
       // Save the block data and process its transactions
+      // TODO: [CONSISTENCY] Validate saveBlock result; if null/failed, handle with rollback + DLQ + metric to avoid partial commits
       await saveBlock({ header: block.header, payload, canonical: null }, tx);
 
       if (!initialChainGapsAlreadyFilled.has(block.header.chainId)) {
@@ -106,13 +125,20 @@ export async function startStreaming() {
       }
 
       await tx.commit();
-
-      await defineCanonicalInStreaming(block.header.hash);
-      blocksRecentlyProcessed.add(blockIdentifier);
     } catch (error) {
       await tx.rollback();
-      console.error('[ERROR][DATA][DATA_CORRUPT] Failed to process block event:', error);
+      // TODO: [OBS][METRICS] Increment 'stream.block_failures' with tags { chainId, reason: 'processing' }
+      // TODO: [STREAM][DLQ] Persist failed block header to DLQ storage for later reprocessing
+      console.error('[ERROR][DATA][DATA_CORRUPT] Failed to process block event', {
+        error,
+        chainId: block?.header?.chainId,
+        height: block?.header?.height,
+        hash: block?.header?.hash,
+      });
+      return;
     }
+
+    await defineCanonicalBaseline(block.header.hash);
   };
 
   const processBlocks = async () => {
@@ -138,26 +164,14 @@ export async function startStreaming() {
       await processBlock(block);
     }
 
-    blocksToProcess.length = 0;
-
     setTimeout(processBlocks, 1000);
   };
 
-  setInterval(
-    () => {
-      blocksRecentlyProcessed.clear();
-      console.log('[INFO][SYNC][STREAMING] blocksRecentlyProcessed cleared');
-    },
-    1000 * 60 * 60 * 1,
-  );
-
   processBlocks();
-
-  // Run guard backfilling immediately on startup
   backfillGuards();
 
-  // Schedule a periodic check of canonical path for all chains every 1 hour
-  setInterval(checkCanonicalPathForAllChains, 1000 * 60 * 60 * 1);
+  // Schedule a periodic check of pair creation events every 2 minutes
+  setInterval(startPairCreation, 1000 * 60 * 2);
 }
 
 /**
@@ -256,7 +270,7 @@ export async function saveBlock(
     // Process the block's transactions and events
     return processPayloadKey(createdBlock, payloadData, tx);
   } catch (error) {
-    console.error(`[ERROR][DB][DATA_CORRUPT] Failed to save block to database:`, error);
+    console.error('[ERROR][DB][DATA_CORRUPT] Failed to save block to database:', error);
     return null;
   }
 }

@@ -22,7 +22,7 @@ import './plugins/instrument';
 import { ApolloServer, ApolloServerPlugin } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
 import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer';
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import http from 'http';
 import cors from 'cors';
 import { resolvers } from './resolvers';
@@ -83,12 +83,6 @@ const typeDefs = readFileSync(join(__dirname, './config/schema.graphql'), 'utf-8
  * The port on which the GraphQL API will listen
  */
 const KADENA_GRAPHQL_API_PORT = process.env.KADENA_GRAPHQL_API_PORT ?? '3001';
-
-/**
- * Array of domains allowed to access the GraphQL API
- */
-
-const ALLOWED_ORIGINS = getArrayEnvString('ALLOWED_ORIGINS');
 
 /**
  * Apollo Server plugin that validates pagination parameters in GraphQL requests
@@ -215,36 +209,6 @@ const securitySanitizationPlugin: ApolloServerPlugin = {
 };
 
 /**
- * Checks if an origin is allowed to access the GraphQL API
- *
- * Implements CORS policy by validating origin domains against the allowed list.
- * Permits localhost for development and allows both exact matches and subdomains
- * of kadena.io.
- *
- * @param origin - The origin domain requesting access
- * @returns Boolean indicating if the origin is allowed
- */
-const isAllowedOrigin = (origin: string): boolean => {
-  try {
-    const originUrl = new URL(origin);
-    if (originUrl.hostname === 'localhost') return true;
-
-    return ALLOWED_ORIGINS.some(allowed => {
-      const allowedUrl = new URL(allowed);
-      // Check if it's an exact match
-      if (originUrl.origin === allowedUrl.origin) return true;
-      // Check if it's a subdomain (only for kadena.io)
-      if (allowedUrl.hostname === 'kadena.io' && originUrl.hostname.endsWith('.kadena.io')) {
-        return true;
-      }
-      return false;
-    });
-  } catch {
-    return false;
-  }
-};
-
-/**
  * Initializes and starts the GraphQL server
  *
  * Sets up the Apollo Server with:
@@ -266,6 +230,17 @@ export async function startGraphqlServer() {
     typeDefs,
     resolvers,
     introspection: true,
+    // Ensure every GraphQL error is logged through console.error so it gets forwarded by the monitoring hook
+    formatError(formattedError, _error) {
+      try {
+        const path = Array.isArray(formattedError.path) ? formattedError.path.join('.') : '';
+        // Log full message in the first arg so monitoring puts it in data.error
+        console.error(`[ERROR][GRAPHQL][DATA_FORMAT] ${formattedError.message}`, { path });
+      } catch {
+        // no-op
+      }
+      return formattedError;
+    },
     validationRules: [
       depthLimit({
         maxDepth: 9,
@@ -276,6 +251,47 @@ export async function startGraphqlServer() {
       createSentryPlugin(),
       validatePaginationParamsPlugin,
       securitySanitizationPlugin,
+      // Lightweight plugin to expose the operation name to the monitoring hook via global scope
+      {
+        async requestDidStart(ctx: any) {
+          try {
+            (global as any).__currentGraphQLOperationName =
+              ctx?.request?.operationName ?? 'AnonymousOperation';
+          } catch {}
+          return {
+            async didResolveOperation(rcx: any) {
+              try {
+                (global as any).__currentGraphQLOperationName =
+                  rcx?.request?.operationName ?? 'AnonymousOperation';
+              } catch {}
+            },
+            async willSendResponse() {
+              try {
+                (global as any).__currentGraphQLOperationName = undefined;
+              } catch {}
+            },
+          };
+        },
+      } as unknown as ApolloServerPlugin,
+      // Forward all GraphQL resolver errors to console.error so the monitoring hook can send them
+      {
+        async requestDidStart() {
+          return {
+            async didEncounterErrors(ctx: any) {
+              try {
+                const op = ctx.request.operationName ?? 'AnonymousOperation';
+                for (const err of ctx.errors) {
+                  const path = Array.isArray(err.path) ? err.path.join('.') : '';
+                  // Log full message first so monitoring puts it in data.error; details go in extra.args
+                  console.error(`[ERROR][GRAPHQL] ${err.message}`, { operation: op, path });
+                }
+              } catch {
+                // no-op
+              }
+            },
+          };
+        },
+      } as unknown as ApolloServerPlugin,
       ApolloServerPluginDrainHttpServer({ httpServer }),
       {
         async serverWillStart() {
@@ -321,7 +337,7 @@ export async function startGraphqlServer() {
             // like compare it with max and throw error when the threshold is reached
             if (complexity > MAX_COMPLEXITY) {
               throw new Error(
-                'Sorry, too complicated query! Exceeded the maximum allowed complexity.',
+                '[ERROR][GRAPHQL][VALID_RANGE] Sorry, too complicated query! Exceeded the maximum allowed complexity.',
               );
             }
           },
@@ -411,17 +427,41 @@ export async function startGraphqlServer() {
       onConnect: ctx => {
         const ip = ctx.extra.request.socket.remoteAddress || 'unknown';
         activeConnections++;
-        console.log('New connection -> ', ip, 'Total connections opened:', activeConnections);
+        console.info('New connection -> ', ip, 'Total connections opened:', activeConnections);
         return true; // Allow the connection
       },
       onDisconnect: ctx => {
         const ip = ctx.extra.request.socket.remoteAddress || 'unknown';
         activeConnections--;
-        console.log('Closed connection -> ', ip, 'Total connections opened:', activeConnections);
+        console.info('Closed connection -> ', ip, 'Total connections opened:', activeConnections);
       },
     },
     wsServer,
   );
+
+  /**
+   * Middleware to handle malformed URIs before they cause URIError
+   *
+   * This middleware intercepts requests with potentially malformed URIs and validates
+   * them before Express tries to decode them. It prevents URIError exceptions by
+   * catching malformed URLs early and returning a proper 400 Bad Request response.
+   */
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Test if the URL can be properly decoded
+      decodeURIComponent(req.url);
+      next();
+    } catch (error) {
+      if (error instanceof URIError) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: 'Malformed URI',
+        });
+      }
+      next(error);
+    }
+  });
+
   app.use(express.json());
 
   /**
@@ -431,7 +471,7 @@ export async function startGraphqlServer() {
    * This endpoint can be used by load balancers, monitoring tools, and
    * container orchestration platforms to verify service availability.
    */
-  app.get('/health', (req: Request, res: Response) => {
+  app.get('/health', (_req: Request, res: Response) => {
     res.status(200).json({ status: 'OK' });
   });
 
@@ -439,20 +479,6 @@ export async function startGraphqlServer() {
   app.use(
     '/graphql',
     cors<cors.CorsRequest>({
-      origin: (origin, callback) => {
-        if (!origin || origin === 'null') {
-          return callback(null, false);
-        }
-
-        try {
-          if (isAllowedOrigin(origin)) {
-            return callback(null, true);
-          }
-          return callback(new Error(`[ERROR][CORS][ORIGIN] Origin ${origin} not allowed by CORS`));
-        } catch (error) {
-          return callback(null, false);
-        }
-      },
       methods: ['POST', 'OPTIONS'],
       allowedHeaders: [
         'Content-Type',
@@ -473,39 +499,15 @@ export async function startGraphqlServer() {
   );
 
   /**
-   * Handle CORS preflight OPTIONS requests explicitly
+   * Handle 404 Not Found errors for all other routes
    *
-   * This endpoint manages the CORS preflight requests that browsers send before making
-   * actual API requests. It's a critical security component that:
-   *
-   * 1. Validates the origin against the allowed domains list
-   * 2. Sets appropriate CORS headers when origins are allowed:
-   *    - Access-Control-Allow-Origin: Reflects the allowed origin
-   *    - Access-Control-Allow-Credentials: Enables authenticated requests
-   *    - Access-Control-Allow-Methods: Limits to POST and OPTIONS methods
-   *    - Access-Control-Allow-Headers: Specifies allowed request headers
-   *    - Access-Control-Max-Age: Caches preflight result for 24 hours (86400s)
-   * 3. Returns 204 No Content for allowed origins or 403 Forbidden for disallowed ones
-   *
-   * This explicit handling ensures precise control over cross-origin security,
-   * preventing unauthorized domains from accessing the API while allowing
-   * legitimate client applications to function properly.
+   * This middleware catches all requests that don't match any other routes
+   * and returns a 404 Not Found response. It's a critical component of the
+   * error handling system that ensures clients receive clear feedback when
+   * accessing non-existent resources.
    */
-  app.options('*', (req: Request, res: Response) => {
-    const origin = req.headers.origin;
-    if (origin && isAllowedOrigin(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Accept, Origin, X-Requested-With, Cache-Control, Pragma',
-      );
-      res.setHeader('Access-Control-Max-Age', '86400');
-      res.status(204).end();
-    } else {
-      res.status(403).end();
-    }
+  app.get('/*', (_req: Request, res: Response) => {
+    res.status(404).end();
   });
 
   // Initialize cache and start the server
