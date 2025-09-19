@@ -10,41 +10,17 @@ import { ResolverContext } from '../config/apollo-server-config';
 export function createSentryPlugin(): ApolloServerPlugin<ResolverContext> {
   return {
     async requestDidStart({ request, contextValue }) {
-      Sentry.startSpan(
-        {
-          name: request.operationName || 'anonymous',
-          op: 'graphql.query',
-          attributes: {
-            'random-test': 'test',
-            'operation.type': 'graphql.query',
-            'operation.name': request.operationName || 'anonymous',
-          },
+      // Log incoming queries to Sentry as breadcrumbs (no manual spans or profiler here)
+      Sentry.addBreadcrumb({
+        category: 'graphql.query',
+        message: request.operationName || 'Anonymous GraphQL operation',
+        level: 'info',
+        data: {
+          query: request.query,
+          variables: request.variables,
+          operationType: request.operationName ? 'named' : 'anonymous',
         },
-        span => {
-          // Set operation attributes
-          span.setAttributes({
-            'operation.details.type': 'graphql.query',
-            'operation.details.name': request.operationName || 'anonymous',
-            'operation.details.timestamp': new Date().toISOString(),
-            'operation.details.query': request.query,
-          });
-
-          // Optionally log all incoming queries to Sentry as breadcrumbs
-          // Breadcrumbs create a historical trail that persists (query history)
-          Sentry.profiler.startProfiler();
-          Sentry.addBreadcrumb({
-            category: 'graphql.query',
-            message: request.operationName || 'Anonymous GraphQL operation',
-            level: 'info',
-            data: {
-              query: request.query,
-              variables: request.variables,
-              operationType: request.operationName ? 'named' : 'anonymous',
-            },
-          });
-          Sentry.profiler.stopProfiler();
-        },
-      );
+      });
       return {
         async didEncounterErrors({ errors, operation, operationName, request }) {
           // Skip Apollo-specific errors that are intentionally thrown
