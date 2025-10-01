@@ -44,12 +44,14 @@ if (isSslEnabled) {
  * This provides a lower-level database access mechanism than Sequelize.
  *
  * When SSL is enabled, it uses the global certificate bundle for secure connections.
- *
- * TODO: [OPTIMIZATION] Consider implementing connection pooling metrics to monitor performance
- * and adjust pool settings accordingly.
  */
 export const rootPgPool = new Pool({
   connectionString: DB_CONNECTION,
+  max: 20, // Max connections
+  idleTimeoutMillis: 30000, // Close idle connections after 30s
+  connectionTimeoutMillis: 10000, // Fail if can't get connection in 10s
+  statement_timeout: 30000, // Cancel queries after 30s (PostgreSQL)
+  query_timeout: 30000, // Client-side query timeout
   ...(isSslEnabled && {
     ssl: {
       rejectUnauthorized: rejectUnauthorized,
