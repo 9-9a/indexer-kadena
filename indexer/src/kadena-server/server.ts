@@ -44,7 +44,6 @@ import {
 } from 'graphql';
 
 import initCache from '../cache/init';
-import { getArrayEnvString } from '../utils/helpers';
 import {
   directiveEstimator,
   fieldExtensionsEstimator,

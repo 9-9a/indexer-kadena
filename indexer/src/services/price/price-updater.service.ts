@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 import { PriceService } from './price.service';
 
 export class PriceUpdaterService {
@@ -23,11 +21,26 @@ export class PriceUpdaterService {
 
   private async updatePrice(): Promise<void> {
     try {
-      const response = await axios.get(this.DIA_API_URL);
-      const price = response.data.Price;
-      this.priceService.setKdaUsdPrice(price);
+      const response = await fetch(this.DIA_API_URL, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'node-fetch',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data?.Price === undefined) {
+        throw new Error('Price field is missing in API response');
+      }
+
+      this.priceService.setKdaUsdPrice(data.Price);
     } catch (error) {
-      console.error('[ERROR][INT][INT_API] Failed to update KDA/USD price:', error);
+      console.warn('[WARN][API][PRICE_UPDATER] Failed to update KDA/USD price:', error);
     }
   }
 
