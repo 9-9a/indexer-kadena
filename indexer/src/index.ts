@@ -50,7 +50,7 @@ const options = program.opts();
  */
 async function main() {
   try {
-    console.info('Starting v1.1.0');
+    console.info('Starting v1.1.1');
     initializeErrorMonitoring();
     initializeMemoryMonitoring();
     setupAssociations();
