@@ -41,18 +41,6 @@ export function getRequiredEnvString(key: string): string {
 }
 
 /**
- * Retrieves an optional environment variable as a string array.
- * The environment variable is expected to be a comma-separated string.
- *
- * @param key - The name of the environment variable to retrieve.
- * @returns The value of the environment variable as a string array, or an empty array if the variable is not set.
- */
-export function getArrayEnvString(key: string): string[] {
-  const value = process.env[key] ?? '';
-  return value.split(',').filter(item => item.trim() !== '');
-}
-
-/**
  * Checks if a value is null or undefined.
  *
  * @param value - The value to check.
