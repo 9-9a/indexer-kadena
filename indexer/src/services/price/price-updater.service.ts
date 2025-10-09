@@ -40,7 +40,7 @@ export class PriceUpdaterService {
 
       this.priceService.setKdaUsdPrice(data.Price);
     } catch (error) {
-      console.error('[WARN][INT][INT_API] Failed to update KDA/USD price:', error);
+      console.warn('[WARN][INT][INT_API] Failed to update KDA/USD price:', error);
     }
   }
 
