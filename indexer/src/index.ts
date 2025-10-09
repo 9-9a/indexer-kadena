@@ -20,6 +20,7 @@ import { startStreaming } from './services/streaming';
 import { backfillPairEvents } from './services/pair';
 import { setupAssociations } from './models/setup-associations';
 import { PriceUpdaterService } from '@/services/price/price-updater.service';
+import { initializeMemoryMonitoring } from '@/utils/memory-usage';
 
 /**
  * Command-line interface configuration using Commander.
@@ -49,8 +50,9 @@ const options = program.opts();
  */
 async function main() {
   try {
-    console.info('Starting v1.1.0');
+    console.info('Starting v1.1.1');
     initializeErrorMonitoring();
+    initializeMemoryMonitoring();
     setupAssociations();
     PriceUpdaterService.getInstance();
 

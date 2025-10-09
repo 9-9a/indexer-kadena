@@ -21,8 +21,8 @@ if (!SENTRY_DSN || SENTRY_DSN.trim() === '') {
     environment: SENTRY_ENVIRONMENT,
     release: SENTRY_RELEASE,
     sendDefaultPii: true,
-    tracesSampleRate: 1.0,
-    profileSessionSampleRate: 1.0,
+    tracesSampleRate: 0.05,
+    profileSessionSampleRate: 0.05,
     profileLifecycle: 'trace',
     integrations: [
       nodeProfilingIntegration(),

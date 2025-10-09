@@ -1,5 +1,15 @@
 # Changelog
 
+## Sep 12 - Oct 9, 2025
+
+v1.1.1
+
+- fix: silencing error throw from retried functions
+- fix: closing idle connections on the db pool
+- fix: reduced sentry sample ratio
+- refactor: removed unused import and function
+- feat: tracking memory usage every thirty minutes
+
 ## Aug 13 - Sep 11, 2025
 
 - fix: remove unnecessary error throwing in dataloaders
