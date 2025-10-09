@@ -19,7 +19,6 @@
  */
 
 import './plugins/instrument';
-import heapdump from 'heapdump';
 import { ApolloServer, ApolloServerPlugin } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
 import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer';
@@ -509,23 +508,6 @@ export async function startGraphqlServer() {
   app.get('/*', (_req: Request, res: Response) => {
     res.status(404).end();
   });
-
-  const logMemoryUsage = () => {
-    const mem = process.memoryUsage();
-    console.info(
-      `[INFO][MEMORY] Heap: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB / ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB | External: ${(mem.external / 1024 / 1024).toFixed(2)}MB | RSS: ${(mem.rss / 1024 / 1024).toFixed(2)}MB`,
-    );
-
-    // Capture heap snapshot at 1GB memory threshold
-    if (mem.heapUsed > 1 * 1024 * 1024 * 1024) {
-      const filename = `/snapshots/indexer-heap-1GB-${Date.now()}.heapsnapshot`;
-      console.error(`[WARN][MEMORY] 1GB threshold reached! Capturing heap snapshot: ${filename}`);
-      heapdump.writeSnapshot(filename);
-    }
-  };
-
-  // Start periodic memory monitoring every one hour
-  setInterval(logMemoryUsage, 1000 * 60 * 60);
 
   // Initialize cache and start the server
   await initCache(context);
