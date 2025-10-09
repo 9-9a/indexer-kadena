@@ -76,10 +76,7 @@ export default async function initCache(context: ResolverContext) {
       };
       MEMORY_CACHE.set(HASH_RATE_AND_TOTAL_DIFFICULTY_KEY, newValue);
     } catch (err) {
-      console.warn(
-        '[WARN][CACHE][HASH_RATE_AND_TOTAL_DIFFICULTY] Failed to get hash rate and total difficulty',
-        err,
-      );
+      console.error('[WARN][CACHE][DB] Failed to get hash rate and total difficulty', err);
     }
   }
 
@@ -94,7 +91,7 @@ export default async function initCache(context: ResolverContext) {
       const networkStatistics = await networkRepository.getNetworkStatistics();
       MEMORY_CACHE.set(NETWORK_STATISTICS_KEY, networkStatistics);
     } catch (err) {
-      console.warn('[WARN][CACHE][NETWORK_STATISTICS] Failed to get network statistics', err);
+      console.error('[WARN][CACHE][DB] Failed to get network statistics', err);
     }
   }
 
@@ -109,7 +106,7 @@ export default async function initCache(context: ResolverContext) {
       const nodeInfo = await networkRepository.getNodeInfo();
       MEMORY_CACHE.set(NODE_INFO_KEY, nodeInfo);
     } catch (err) {
-      console.warn('[WARN][CACHE][NODE_INFO] Failed to get node info', err);
+      console.error('[WARN][CACHE][DB] Failed to get node info', err);
     }
   }
 
@@ -122,10 +119,7 @@ export default async function initCache(context: ResolverContext) {
       const counters = await networkRepository.getCountersOfEachChain();
       MEMORY_CACHE.set(COUNTERS_OF_EACH_CHAIN_KEY, counters);
     } catch (err) {
-      console.warn(
-        '[WARN][CACHE][COUNTERS_OF_EACH_CHAIN] Failed to get counters of each chain',
-        err,
-      );
+      console.error('[WARN][CACHE][DB] Failed to get counters of each chain', err);
     }
   }
 

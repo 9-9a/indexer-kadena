@@ -72,7 +72,7 @@ export function initializeErrorMonitoring(): void {
     ]
       .filter(Boolean)
       .join(', ');
-    console.warn(`[WARN][MONITORING] Monitoring not initialized. Missing env: ${missing}`);
+    console.error(`[WARN][MONITORING][ENV] Monitoring not initialized. Missing env: ${missing}`);
     return; // Monitoring disabled; keep local logging only
   }
 

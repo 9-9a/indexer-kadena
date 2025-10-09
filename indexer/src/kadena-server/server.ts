@@ -519,7 +519,7 @@ export async function startGraphqlServer() {
     // Capture heap snapshot at 1GB memory threshold
     if (mem.heapUsed > 1 * 1024 * 1024 * 1024) {
       const filename = `/snapshots/indexer-heap-1GB-${Date.now()}.heapsnapshot`;
-      console.warn(`[WARN][MEMORY] 1GB threshold reached! Capturing heap snapshot: ${filename}`);
+      console.error(`[WARN][MEMORY] 1GB threshold reached! Capturing heap snapshot: ${filename}`);
       heapdump.writeSnapshot(filename);
     }
   };
