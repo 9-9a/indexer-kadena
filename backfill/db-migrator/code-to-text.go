@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"flag"
 	"fmt"
 	"go-backfill/config"
 	"log"
@@ -20,9 +19,6 @@ const (
 // properly due lack of memory in the machine.
 
 func updateCodeToText() error {
-	envFile := flag.String("env", ".env", "Path to the .env file")
-	flag.Parse()
-	config.InitEnv(*envFile)
 	env := config.GetConfig()
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		env.DbHost, env.DbPort, env.DbUser, env.DbPassword, env.DbName)
@@ -40,6 +36,15 @@ func updateCodeToText() error {
 		return fmt.Errorf("failed to ping database: %v", err)
 	}
 
+	// Create codetext column if it doesn't exist
+	_, err = db.Exec(`
+		ALTER TABLE "TransactionDetails" 
+		ADD COLUMN IF NOT EXISTS codetext TEXT
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create codetext column: %v", err)
+	}
+
 	// Get max transaction ID to determine processing range
 	var maxTransactionID int
 	if err := db.QueryRow(`SELECT COALESCE(MAX(id), 0) FROM "TransactionDetails"`).Scan(&maxTransactionID); err != nil {
@@ -54,6 +59,24 @@ func updateCodeToText() error {
 	// Process transactions in batches
 	if err := processTransactionsBatchForCode(db, startTransactionIdForCode, maxTransactionID); err != nil {
 		return fmt.Errorf("failed to process transactions: %v", err)
+	}
+
+	// Drop code column
+	_, err = db.Exec(`
+		ALTER TABLE "TransactionDetails" 
+		DROP COLUMN IF EXISTS code
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to drop code column: %v", err)
+	}
+
+	// Rename codetext column to code
+	_, err = db.Exec(`
+		ALTER TABLE "TransactionDetails" 
+		RENAME COLUMN codetext TO code
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to rename codetext column: %v", err)
 	}
 
 	log.Println("Successfully updated all TransactionDetails code values to text")
@@ -198,7 +221,7 @@ func processBatchForCode(db *sql.DB, startId, endId int) (int, error) {
 	return processed, nil
 }
 
-func mainCodeText() {
+func CodeToText() {
 	if err := updateCodeToText(); err != nil {
 		log.Fatalf("Error: %v", err)
 	}

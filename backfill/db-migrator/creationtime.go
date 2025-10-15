@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"flag"
 	"fmt"
 	"go-backfill/config"
 	"log"
@@ -20,9 +19,6 @@ const (
 // The main motivation was to improve the performance of the events and transfers queries.
 
 func updateCreationTimes() error {
-	envFile := flag.String("env", ".env", "Path to the .env file")
-	flag.Parse()
-	config.InitEnv(*envFile)
 	env := config.GetConfig()
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		env.DbHost, env.DbPort, env.DbUser, env.DbPassword, env.DbName)
@@ -147,7 +143,7 @@ func processBatch(db *sql.DB, startId, endId int) (int, error) {
 	return totalRowsAffected, nil
 }
 
-func creationTimes() {
+func DuplicateCreationTimes() {
 	if err := updateCreationTimes(); err != nil {
 		log.Fatalf("Error: %v", err)
 	}
