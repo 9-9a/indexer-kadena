@@ -2,10 +2,9 @@ FROM golang:1.23.3 AS builder
 WORKDIR /app
 COPY . .
 RUN go mod download
-RUN CGO_ENABLED=0 GOOS=linux go build -o db-migrator ./db-migrator/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o db-migrator ./db-migrator
 
-FROM scratch
-WORKDIR /app
-COPY ./global-bundle.pem ./global-bundle.pem
+FROM alpine:latest
+WORKDIR /root
 COPY --from=builder /app/db-migrator .
 ENTRYPOINT ["./db-migrator"]
