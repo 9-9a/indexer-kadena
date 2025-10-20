@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"go-backfill/config"
 	"io"
@@ -97,10 +96,7 @@ type TransactionPart1 struct {
 	TxId         int             `json:"txId"`
 }
 
-func reconcile() {
-	envFile := flag.String("env", ".env", "Path to the .env file")
-	flag.Parse()
-	config.InitEnv(*envFile)
+func InsertReconcileEvents() {
 	env := config.GetConfig()
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		env.DbHost, env.DbPort, env.DbUser, env.DbPassword, env.DbName)

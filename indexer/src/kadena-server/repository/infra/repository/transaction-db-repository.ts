@@ -287,8 +287,8 @@ export default class TransactionDbRepository implements TransactionRepository {
 
     const { rows } = await rootPgPool.query(query, queryParams);
 
-    const edges = rows.slice(0, limit).map(tx => ({
-      cursor: `${tx.creationTime.toString()}:${tx.id.toString()}`,
+    const edges = rows.map(tx => ({
+      cursor: tx.id.toString(),
       node: transactionSummaryValidator.validate(tx),
     }));
 
