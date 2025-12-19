@@ -448,6 +448,28 @@ type Query {
   Get prices for all tokens in a protocol
   """
   tokenPrices(protocolAddress: String): [TokenPrice!]! @complexity(value: 1)
+
+  """
+  Retrieve the richlist for a fungible token, showing top accounts by total balance.
+  Returns accounts sorted by balance in descending order.
+  """
+  richlist(
+    """
+    The fungible token module name (e.g., "coin")
+    """
+    fungibleName: String = "coin"
+    """
+    Optional chain ID to filter balances by a specific chain
+    """
+    chainId: String
+    """
+    Number of top accounts to return (default 10, max 100)
+    """
+    first: Int = 10
+    after: String
+    before: String
+    last: Int
+  ): RichlistConnection! @complexity(value: 10, multipliers: ["first", "last"])
 }
 
 type QueryTransactionsByPactCodeConnection {
@@ -1596,4 +1618,40 @@ type TokenPrice {
   priceInUsd: Decimal!
   protocolAddress: String!
   updatedAt: DateTime!
+}
+
+"""
+Connection type for richlist query results.
+"""
+type RichlistConnection {
+  edges: [RichlistConnectionEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type RichlistConnectionEdge {
+  cursor: String!
+  node: RichlistEntry!
+}
+
+"""
+An entry in the richlist showing an account's total balance for a fungible token.
+"""
+type RichlistEntry {
+  """
+  The account name
+  """
+  accountName: String!
+  """
+  The fungible token module name
+  """
+  fungibleName: String!
+  """
+  The total balance across all chains (or for a specific chain if chainId was provided)
+  """
+  totalBalance: Decimal!
+  """
+  The chain ID if the query was filtered by chain, otherwise null for aggregated balance
+  """
+  chainId: String
 }

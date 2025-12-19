@@ -104,6 +104,7 @@ import { totalCountNonFungibleChainAccountTransfersConnectionResolver } from '@/
 import { totalCountQueryBlocksFromHeightConnectionResolver } from '@/kadena-server/resolvers/fields/query-blocks-from-height-connection/total-count-query-blocks-from-height-connection-resolver';
 import { transactionsByPactCodeQueryResolver } from '@/kadena-server/resolvers/query/transactions-by-pact-code-query-resolver';
 import { lastTokenPriceInKdaQueryResolver } from '@/kadena-server/resolvers/query/last-token-price-in-kda-resolver';
+import { richlistQueryResolver } from './query/richlist-query-resolver';
 /**
  * Complete resolver map for the GraphQL API
  *
@@ -164,6 +165,7 @@ export const resolvers: Resolvers<ResolverContext> = {
     dexMetrics: dexMetricsQueryResolver,
     tokenPrice: tokenPriceQueryResolver,
     tokenPrices: tokenPricesQueryResolver,
+    richlist: richlistQueryResolver,
   },
   Block: {
     parent: parentBlockResolver, // data loader set.

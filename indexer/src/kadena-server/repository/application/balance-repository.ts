@@ -105,6 +105,26 @@ export interface GetAccountBalancesParams extends PaginationsParams {
 }
 
 /**
+ * Parameters for fetching richlist (top accounts by balance).
+ */
+export interface GetRichlistParams extends PaginationsParams {
+  /** The fungible token module name (e.g., "coin") */
+  fungibleName: string;
+  /** Optional chain ID to filter by specific chain */
+  chainId?: string | null;
+}
+
+/**
+ * Output type for a richlist entry.
+ */
+export interface RichlistEntryOutput {
+  accountName: string;
+  fungibleName: string;
+  totalBalance: number;
+  chainId?: string | null;
+}
+
+/**
  * Interface defining the contract for balance data access.
  * Implementations of this interface handle the details of retrieving
  * balance data from specific storage mechanisms (e.g., database or blockchain node).
@@ -228,4 +248,16 @@ export default interface BalanceRepository {
     fungibleName: string,
     chainId: string,
   ): Promise<FungibleChainAccountOutput[]>;
+
+  /**
+   * Retrieves the richlist (top accounts by balance) for a fungible token.
+   *
+   * @param params - Parameters including fungibleName, optional chainId, and pagination
+   * @returns Promise resolving to paginated richlist entries sorted by balance descending
+   */
+  getRichlist(params: GetRichlistParams): Promise<{
+    pageInfo: PageInfo;
+    edges: ConnectionEdge<RichlistEntryOutput>[];
+    totalCount: number;
+  }>;
 }

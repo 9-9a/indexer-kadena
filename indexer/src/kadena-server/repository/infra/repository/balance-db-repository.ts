@@ -18,10 +18,12 @@ import { handleSingleQuery } from '../../../../utils/raw-query';
 import BalanceRepository, {
   FungibleAccountOutput,
   FungibleChainAccountOutput,
+  GetRichlistParams,
   GetTokensParams,
   INonFungibleAccount,
   INonFungibleChainAccount,
   INonFungibleTokenBalance,
+  RichlistEntryOutput,
 } from '../../application/balance-repository';
 import {
   getNonFungibleAccountBase64ID,
@@ -599,6 +601,148 @@ export default class BalanceDbRepository implements BalanceRepository {
     });
 
     return { pageInfo, edges: edgesProcessed };
+  }
+
+  /**
+   * Retrieves the richlist (top accounts by balance) for a fungible token.
+   *
+   * This method queries the Balances table to aggregate balances per account
+   * and returns them sorted by total balance in descending order.
+   *
+   * @param params - Parameters including fungibleName, optional chainId, and pagination
+   * @returns Promise resolving to paginated richlist entries sorted by balance descending
+   */
+  async getRichlist(params: GetRichlistParams): Promise<{
+    pageInfo: { hasNextPage: boolean; hasPreviousPage: boolean; startCursor?: string; endCursor?: string };
+    edges: { cursor: string; node: RichlistEntryOutput }[];
+    totalCount: number;
+  }> {
+    const { fungibleName, chainId } = params;
+    const { limit, order, after, before } = getPaginationParams(params);
+
+    // Clamp limit to max 100
+    const clampedLimit = Math.min(limit, 100);
+
+    const queryParams: any[] = [fungibleName, clampedLimit];
+    let chainCondition = '';
+
+    if (chainId) {
+      queryParams.push(chainId);
+      chainCondition = `AND b."chainId" = $${queryParams.length}`;
+    }
+
+    // Build cursor conditions
+    let cursorCondition = '';
+    if (after) {
+      // after cursor format: "balance:account" to handle pagination correctly
+      const [afterBalance, afterAccount] = after.split(':');
+      queryParams.push(parseFloat(afterBalance), afterAccount);
+      cursorCondition = `AND (total_balance < $${queryParams.length - 1} OR (total_balance = $${queryParams.length - 1} AND account > $${queryParams.length}))`;
+    }
+
+    if (before) {
+      const [beforeBalance, beforeAccount] = before.split(':');
+      queryParams.push(parseFloat(beforeBalance), beforeAccount);
+      cursorCondition = `AND (total_balance > $${queryParams.length - 1} OR (total_balance = $${queryParams.length - 1} AND account < $${queryParams.length}))`;
+    }
+
+    // Query to get the richlist with aggregated balances
+    // Uses the latest balance per (account, chainId) pair
+    const query = `
+      WITH latest_balances AS (
+        SELECT DISTINCT ON (b.account, b."chainId")
+          b.account,
+          b."chainId",
+          b.balance,
+          b.module
+        FROM "Balances" b
+        WHERE b.module = $1
+          AND b."hasTokenId" = false
+          ${chainCondition}
+        ORDER BY b.account, b."chainId", b.id DESC
+      ),
+      aggregated AS (
+        SELECT
+          account,
+          SUM(balance) as total_balance
+        FROM latest_balances
+        GROUP BY account
+      )
+      SELECT
+        account,
+        total_balance
+      FROM aggregated
+      WHERE total_balance > 0
+      ${cursorCondition}
+      ORDER BY total_balance ${order === 'ASC' ? 'ASC' : 'DESC'}, account ${order === 'ASC' ? 'DESC' : 'ASC'}
+      LIMIT $2
+    `;
+
+    const { rows } = await rootPgPool.query(query, queryParams);
+
+    // Get total count
+    const countParams: any[] = [fungibleName];
+    let countChainCondition = '';
+    if (chainId) {
+      countParams.push(chainId);
+      countChainCondition = `AND b."chainId" = $${countParams.length}`;
+    }
+
+    const countQuery = `
+      WITH latest_balances AS (
+        SELECT DISTINCT ON (b.account, b."chainId")
+          b.account,
+          b.balance
+        FROM "Balances" b
+        WHERE b.module = $1
+          AND b."hasTokenId" = false
+          ${countChainCondition}
+        ORDER BY b.account, b."chainId", b.id DESC
+      ),
+      aggregated AS (
+        SELECT account, SUM(balance) as total_balance
+        FROM latest_balances
+        GROUP BY account
+      )
+      SELECT COUNT(*) as count
+      FROM aggregated
+      WHERE total_balance > 0
+    `;
+
+    const { rows: countRows } = await rootPgPool.query(countQuery, countParams);
+    const totalCount = parseInt(countRows[0]?.count || '0', 10);
+
+    // Format results as GraphQL connection edges
+    const edges = rows.map(row => {
+      const totalBalance = parseFloat(row.total_balance);
+      return {
+        cursor: `${totalBalance}:${row.account}`,
+        node: {
+          accountName: row.account,
+          fungibleName,
+          totalBalance,
+          chainId: chainId || null,
+        },
+      };
+    });
+
+    // Determine pagination info
+    const hasNextPage = rows.length === clampedLimit;
+    const hasPreviousPage = !!after;
+
+    const pageInfo = {
+      hasNextPage,
+      hasPreviousPage,
+      startCursor: edges.length > 0 ? edges[0].cursor : undefined,
+      endCursor: edges.length > 0 ? edges[edges.length - 1].cursor : undefined,
+    };
+
+    // Reverse edges if using backward pagination
+    if (order === 'ASC') {
+      edges.reverse();
+    }
+
+    return { pageInfo, edges, totalCount };
   }
 
   private async processAccounts(
