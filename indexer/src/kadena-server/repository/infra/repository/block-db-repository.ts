@@ -453,7 +453,8 @@ export default class BlockDbRepository implements BlockRepository {
       WHERE "chainId" = ANY($1)
     `;
     const { rows } = await rootPgPool.query(query, [chainIdsToUse]);
-    return parseInt(rows[0].totalCount, 10) - minimumDepth * chainIdsToUse.length;
+    const totalCount = parseInt(rows[0]?.totalCount || '0', 10);
+    return totalCount - minimumDepth * chainIdsToUse.length;
   }
 
   /**
