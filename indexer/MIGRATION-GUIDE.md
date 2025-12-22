@@ -12,10 +12,14 @@ node run-single-migration.js list
 node run-single-migration.js status
 ```
 
-### Run a Single Migration
+### Run Migration(s)
 ```bash
-# By number (from the list)
+# Single migration by number
 node run-single-migration.js run 30
+
+# Multiple migrations by range
+node run-single-migration.js run 1-20
+node run-single-migration.js run 5-10
 
 # Or by filename
 node run-single-migration.js run 20250722170139-create-counter-table.js
@@ -53,9 +57,12 @@ npm run migrate:up
 node run-single-migration.js list
 ```
 
-### 2. Run migrations in order (one at a time)
+### 2. Run migrations in order (one at a time or range)
 ```bash
-# Run migrations by number (easier!)
+# Run all core migrations at once (fast!)
+node run-single-migration.js run 1-10
+
+# Or run individually
 node run-single-migration.js run 1
 node run-single-migration.js run 2
 node run-single-migration.js run 3
@@ -114,16 +121,15 @@ npm run migrate:up
 node run-single-migration.js enable 1  # It will be #1 in disabled list
 ```
 
-### Scenario 2: Run Only Core Migrations
+### Scenario 2: Run Only Core Migrations (Fast with Range)
 ```bash
-# Run required migrations one by one
-node run-single-migration.js run 20241105002409-enable-pg-trgm-and-btree-gin.js
-node run-single-migration.js run 20241105002410-add-blocks-table.js
-node run-single-migration.js run 20241105002411-add-transactions-table.js
-# ... etc
+# Run first 16 migrations (all core tables)
+node run-single-migration.js run 1-16
 
-# Disable optional ones
-node run-single-migration.js disable 20250520121820-create-token-table.js
+# Or disable optional ones first, then run all
+node run-single-migration.js disable 17  # Tokens
+node run-single-migration.js disable 18  # Pairs
+npm run migrate:up
 ```
 
 ### Scenario 3: Only Run Counters Migration

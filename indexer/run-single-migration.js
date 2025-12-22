@@ -3,10 +3,14 @@
  * Run a single migration or manage migrations individually
  *
  * Usage:
- *   node run-single-migration.js list                    - List all migrations
- *   node run-single-migration.js run <number|filename>   - Run specific migration
+ *   node run-single-migration.js list                      - List all migrations
+ *   node run-single-migration.js run <number|range|filename> - Run migration(s)
  *   node run-single-migration.js disable <number|filename> - Disable a migration
  *   node run-single-migration.js enable <number|filename>  - Enable a migration
+ *
+ * Examples:
+ *   node run-single-migration.js run 1       - Run migration #1
+ *   node run-single-migration.js run 1-20    - Run migrations #1 through #20
  */
 
 const fs = require('fs');
@@ -72,13 +76,12 @@ function listMigrations() {
   console.log('');
 }
 
-function runMigration(input) {
-  const filename = resolveToFilename(input);
+function runSingleMigration(filename) {
   const sourcePath = path.join(MIGRATIONS_DIR, filename);
 
   if (!fs.existsSync(sourcePath)) {
     console.error(`❌ Migration not found: ${filename}`);
-    process.exit(1);
+    return false;
   }
 
   console.log(`\n🔄 Running migration: ${filename}\n`);
@@ -99,6 +102,7 @@ function runMigration(input) {
     });
 
     console.log(`\n✅ Migration completed: ${filename}\n`);
+    return true;
   } catch (error) {
     console.error(`\n❌ Migration failed: ${error.message}\n`);
 
@@ -114,10 +118,66 @@ function runMigration(input) {
     }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-    process.exit(1);
+    return false;
   } finally {
     // Cleanup
     fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function runMigration(input) {
+  // Check if it's a range (e.g., "1-20")
+  const rangeMatch = input.match(/^(\d+)-(\d+)$/);
+
+  if (rangeMatch) {
+    const start = parseInt(rangeMatch[1], 10);
+    const end = parseInt(rangeMatch[2], 10);
+    const migrations = getAvailableMigrations();
+
+    if (start < 1 || end > migrations.length || start > end) {
+      console.error(`❌ Invalid range: ${input}. Valid range: 1-${migrations.length}`);
+      process.exit(1);
+    }
+
+    console.log(`\n📦 Running migrations ${start} to ${end} (${end - start + 1} total)\n`);
+
+    let successCount = 0;
+    let failedAt = null;
+
+    for (let i = start; i <= end; i++) {
+      const filename = migrations[i - 1];
+      const success = runSingleMigration(filename);
+
+      if (success) {
+        successCount++;
+      } else {
+        failedAt = i;
+        break;
+      }
+    }
+
+    console.log('\n═══════════════════════════════════════════════════════');
+    console.log(`Summary: ${successCount}/${end - start + 1} migrations completed`);
+
+    if (failedAt) {
+      console.log(`❌ Stopped at migration #${failedAt}`);
+      console.log(`   To continue: node run-single-migration.js run ${failedAt}-${end}`);
+      console.log('═══════════════════════════════════════════════════════\n');
+      process.exit(1);
+    } else {
+      console.log('✅ All migrations completed successfully');
+      console.log('═══════════════════════════════════════════════════════\n');
+    }
+
+    return;
+  }
+
+  // Single migration
+  const filename = resolveToFilename(input);
+  const success = runSingleMigration(filename);
+
+  if (!success) {
+    process.exit(1);
   }
 }
 
@@ -168,18 +228,22 @@ Migration Management Script
 Usage: node run-single-migration.js {command} [options]
 
 Commands:
-  list                      - List all available and disabled migrations
-  status                    - Check which migrations have been run
-  run <number|filename>     - Run a specific migration
-  disable <number|filename> - Disable a migration (move to .disabled/)
-  enable <number|filename>  - Enable a disabled migration
+  list                           - List all available and disabled migrations
+  status                         - Check which migrations have been run
+  run <number|range|filename>    - Run migration(s)
+  disable <number|filename>      - Disable a migration (move to .disabled/)
+  enable <number|filename>       - Enable a disabled migration
 
 Examples:
   node run-single-migration.js list
   node run-single-migration.js status
 
-  # Run by number (from the list)
+  # Run single migration by number
   node run-single-migration.js run 30
+
+  # Run multiple migrations by range
+  node run-single-migration.js run 1-20
+  node run-single-migration.js run 5-10
 
   # Run by filename
   node run-single-migration.js run 20250722170139-create-counter-table.js
