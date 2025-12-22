@@ -101,6 +101,19 @@ function runMigration(input) {
     console.log(`\n✅ Migration completed: ${filename}\n`);
   } catch (error) {
     console.error(`\n❌ Migration failed: ${error.message}\n`);
+
+    // Print the migration code for debugging
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Migration code that failed:');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    try {
+      const migrationCode = fs.readFileSync(sourcePath, 'utf8');
+      console.log(migrationCode);
+    } catch (readError) {
+      console.error('Could not read migration file:', readError.message);
+    }
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
     process.exit(1);
   } finally {
     // Cleanup
