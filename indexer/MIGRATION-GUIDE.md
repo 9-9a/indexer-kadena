@@ -14,18 +14,28 @@ node run-single-migration.js status
 
 ### Run a Single Migration
 ```bash
+# By number (from the list)
+node run-single-migration.js run 30
+
+# Or by filename
 node run-single-migration.js run 20250722170139-create-counter-table.js
 ```
 
 ### Disable a Migration (Skip It)
 ```bash
-# Move migration to .disabled/ folder
+# By number
+node run-single-migration.js disable 30
+
+# Or by filename
 node run-single-migration.js disable 20250722170139-create-counter-table.js
 ```
 
 ### Enable a Disabled Migration
 ```bash
-# Move migration back from .disabled/ folder
+# By number (from disabled list)
+node run-single-migration.js enable 1
+
+# Or by filename
 node run-single-migration.js enable 20250722170139-create-counter-table.js
 ```
 
@@ -45,13 +55,16 @@ node run-single-migration.js list
 
 ### 2. Run migrations in order (one at a time)
 ```bash
-# Run the first migration
+# Run migrations by number (easier!)
+node run-single-migration.js run 1
+node run-single-migration.js run 2
+node run-single-migration.js run 3
+# ... continue with each number
+
+# Or by filename
 node run-single-migration.js run 20241105002409-enable-pg-trgm-and-btree-gin.js
-
-# Run the second migration
 node run-single-migration.js run 20241105002410-add-blocks-table.js
-
-# Continue with each migration...
+# ... etc
 ```
 
 ### 3. Check status after each migration
@@ -88,14 +101,17 @@ node run-single-migration.js status
 
 ### Scenario 1: Skip an Index Migration (Too Slow)
 ```bash
-# Disable the migration
-node run-single-migration.js disable 20250825181017-add-indexes-to-transfers.js
+# List to find the number
+node run-single-migration.js list
+
+# Disable migration #37 (or by filename)
+node run-single-migration.js disable 37
 
 # Run all other migrations
 npm run migrate:up
 
 # Re-enable later if needed
-node run-single-migration.js enable 20250825181017-add-indexes-to-transfers.js
+node run-single-migration.js enable 1  # It will be #1 in disabled list
 ```
 
 ### Scenario 2: Run Only Core Migrations
@@ -112,7 +128,10 @@ node run-single-migration.js disable 20250520121820-create-token-table.js
 
 ### Scenario 3: Only Run Counters Migration
 ```bash
-# Run just the Counters table migration
+# Run just the Counters table migration (migration #30)
+node run-single-migration.js run 30
+
+# Or by filename
 node run-single-migration.js run 20250722170139-create-counter-table.js
 ```
 

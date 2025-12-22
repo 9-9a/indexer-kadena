@@ -4,9 +4,9 @@
  *
  * Usage:
  *   node run-single-migration.js list                    - List all migrations
- *   node run-single-migration.js run <filename>          - Run specific migration
- *   node run-single-migration.js disable <filename>      - Disable a migration
- *   node run-single-migration.js enable <filename>       - Enable a migration
+ *   node run-single-migration.js run <number|filename>   - Run specific migration
+ *   node run-single-migration.js disable <number|filename> - Disable a migration
+ *   node run-single-migration.js enable <number|filename>  - Enable a migration
  */
 
 const fs = require('fs');
@@ -21,20 +21,46 @@ if (!fs.existsSync(DISABLED_DIR)) {
   fs.mkdirSync(DISABLED_DIR, { recursive: true });
 }
 
-function listMigrations() {
-  console.log('\n=== Available Migrations ===');
-  const files = fs.readdirSync(MIGRATIONS_DIR)
+function getAvailableMigrations() {
+  return fs.readdirSync(MIGRATIONS_DIR)
     .filter(f => f.endsWith('.js'))
     .sort();
+}
+
+function getDisabledMigrations() {
+  return fs.existsSync(DISABLED_DIR)
+    ? fs.readdirSync(DISABLED_DIR).filter(f => f.endsWith('.js')).sort()
+    : [];
+}
+
+function resolveToFilename(input, fromDisabled = false) {
+  // If it's a number, get the file by index
+  if (/^\d+$/.test(input)) {
+    const index = parseInt(input, 10) - 1; // Convert to 0-based index
+    const migrations = fromDisabled ? getDisabledMigrations() : getAvailableMigrations();
+
+    if (index < 0 || index >= migrations.length) {
+      console.error(`❌ Invalid migration number: ${input}. Valid range: 1-${migrations.length}`);
+      process.exit(1);
+    }
+
+    return migrations[index];
+  }
+
+  // Otherwise assume it's a filename
+  return input;
+}
+
+function listMigrations() {
+  console.log('\n=== Available Migrations ===');
+  const files = getAvailableMigrations();
 
   files.forEach((file, index) => {
     console.log(`${index + 1}. ${file}`);
   });
 
   console.log('\n=== Disabled Migrations ===');
-  const disabled = fs.existsSync(DISABLED_DIR)
-    ? fs.readdirSync(DISABLED_DIR).filter(f => f.endsWith('.js')).sort()
-    : [];
+  const disabled = getDisabledMigrations();
 
   if (disabled.length === 0) {
     console.log('(none)');
@@ -46,7 +72,8 @@ function listMigrations() {
   console.log('');
 }
 
-function runMigration(filename) {
+function runMigration(input) {
+  const filename = resolveToFilename(input);
   const sourcePath = path.join(MIGRATIONS_DIR, filename);
 
   if (!fs.existsSync(sourcePath)) {
@@ -81,7 +108,8 @@ function runMigration(filename) {
   }
 }
 
-function disableMigration(filename) {
+function disableMigration(input) {
+  const filename = resolveToFilename(input);
   const sourcePath = path.join(MIGRATIONS_DIR, filename);
   const destPath = path.join(DISABLED_DIR, filename);
 
@@ -94,7 +122,8 @@ function disableMigration(filename) {
   console.log(`✅ Disabled: ${filename}`);
 }
 
-function enableMigration(filename) {
+function enableMigration(input) {
+  const filename = resolveToFilename(input, true); // true = from disabled
   const sourcePath = path.join(DISABLED_DIR, filename);
   const destPath = path.join(MIGRATIONS_DIR, filename);
 
@@ -126,18 +155,27 @@ Migration Management Script
 Usage: node run-single-migration.js {command} [options]
 
 Commands:
-  list                    - List all available and disabled migrations
-  status                  - Check which migrations have been run
-  run <filename>          - Run a specific migration
-  disable <filename>      - Disable a migration (move to .disabled/)
-  enable <filename>       - Enable a disabled migration
+  list                      - List all available and disabled migrations
+  status                    - Check which migrations have been run
+  run <number|filename>     - Run a specific migration
+  disable <number|filename> - Disable a migration (move to .disabled/)
+  enable <number|filename>  - Enable a disabled migration
 
 Examples:
   node run-single-migration.js list
   node run-single-migration.js status
+
+  # Run by number (from the list)
+  node run-single-migration.js run 30
+
+  # Run by filename
   node run-single-migration.js run 20250722170139-create-counter-table.js
-  node run-single-migration.js disable 20250722170139-create-counter-table.js
-  node run-single-migration.js enable 20250722170139-create-counter-table.js
+
+  # Disable by number
+  node run-single-migration.js disable 17
+
+  # Enable by number (from disabled list)
+  node run-single-migration.js enable 1
 `);
 }
 
