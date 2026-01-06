@@ -51,6 +51,7 @@ import {
 } from 'graphql-query-complexity';
 import { depthLimit } from '@graphile/depth-limit';
 import { createSentryPlugin } from './plugins/sentry-plugin';
+import { syncBalances } from '../services/sync-balances';
 
 /**
  * Maximum allowed complexity for GraphQL queries
@@ -82,6 +83,16 @@ const typeDefs = readFileSync(join(__dirname, './config/schema.graphql'), 'utf-8
  * The port on which the GraphQL API will listen
  */
 const KADENA_GRAPHQL_API_PORT = process.env.KADENA_GRAPHQL_API_PORT ?? '3001';
+
+/**
+ * Interval in milliseconds for automatic balance synchronization
+ * Default: 3600000ms (1 hour)
+ * Set to 0 to disable automatic syncing
+ */
+const BALANCE_SYNC_INTERVAL_MS = parseInt(
+  process.env.BALANCE_SYNC_INTERVAL_MS ?? '3600000',
+  10,
+);
 
 /**
  * Apollo Server plugin that validates pagination parameters in GraphQL requests
@@ -513,4 +524,35 @@ export async function startGraphqlServer() {
   await initCache(context);
   await new Promise<void>(resolve => httpServer.listen({ port: KADENA_GRAPHQL_API_PORT }, resolve));
   console.info(`[INFO][API][BIZ_FLOW] GraphQL server started on port ${KADENA_GRAPHQL_API_PORT}.`);
+
+  // Start automatic balance synchronization if enabled
+  if (BALANCE_SYNC_INTERVAL_MS > 0) {
+    console.info(
+      `[INFO][WORKER][BIZ_FLOW] Starting automatic balance sync every ${BALANCE_SYNC_INTERVAL_MS / 1000 / 60} minutes`,
+    );
+
+    // Run initial sync after a short delay to let the server fully start
+    setTimeout(async () => {
+      try {
+        console.info('[INFO][WORKER][BIZ_FLOW] Running initial balance sync...');
+        await syncBalances();
+      } catch (error) {
+        console.error('[ERROR][WORKER][BIZ_FLOW] Initial balance sync failed:', error);
+      }
+    }, 30000); // Wait 30 seconds after server start
+
+    // Schedule periodic syncs
+    setInterval(async () => {
+      try {
+        console.info('[INFO][WORKER][BIZ_FLOW] Running scheduled balance sync...');
+        await syncBalances();
+      } catch (error) {
+        console.error('[ERROR][WORKER][BIZ_FLOW] Scheduled balance sync failed:', error);
+      }
+    }, BALANCE_SYNC_INTERVAL_MS);
+  } else {
+    console.info(
+      '[INFO][WORKER][BIZ_FLOW] Automatic balance sync is disabled (BALANCE_SYNC_INTERVAL_MS=0)',
+    );
+  }
 }
