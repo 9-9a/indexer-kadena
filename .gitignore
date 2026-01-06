@@ -16,3 +16,5 @@ indexer/indexer
 .cursor
 indexer/tests/logs/*
 indexer/tests/integration/api-parity/logs/*
+indexer/temp-migration-*
+indexer/migrations/.disabled/

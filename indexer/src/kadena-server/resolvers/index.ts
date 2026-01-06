@@ -67,6 +67,7 @@ import { fungibleAccountsByPublicKeyQueryResolver } from './query/fungible-accou
 import { fungibleChainAccountQueryResolver } from './query/fungible-chain-account-query-resolver';
 import { fungibleChainAccountsByPublicKeyQueryResolver } from './query/fungible-chain-accounts-by-public-key-query-resolver';
 import { fungibleChainAccountsQueryResolver } from './query/fungible-chain-accounts-query-resolver';
+import { topFungibleAccountsQueryResolver } from './query/top-fungible-accounts-query-resolver';
 import { balanceQueryResolver } from './query/balance-query-resolver';
 import { gasLimitEstimateQueryResolver } from './query/gas-limit-estimate-query-resolver';
 import { graphConfigurationQueryResolver } from './query/graph-configuration-query-resolver';
@@ -141,6 +142,7 @@ export const resolvers: Resolvers<ResolverContext> = {
     fungibleChainAccount: fungibleChainAccountQueryResolver,
     fungibleChainAccounts: fungibleChainAccountsQueryResolver,
     fungibleChainAccountsByPublicKey: fungibleChainAccountsByPublicKeyQueryResolver,
+    topFungibleAccounts: topFungibleAccountsQueryResolver,
     gasLimitEstimate: gasLimitEstimateQueryResolver,
     graphConfiguration: graphConfigurationQueryResolver,
     lastBlockHeight: lastBlockHeightQueryResolver,

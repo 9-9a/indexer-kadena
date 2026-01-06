@@ -105,6 +105,14 @@ export interface GetAccountBalancesParams extends PaginationsParams {
 }
 
 /**
+ * Parameters for fetching top fungible accounts with pagination and sorting.
+ */
+export interface GetTopFungibleAccountsParams extends PaginationsParams {
+  fungibleName?: string | null;
+  orderBy?: 'TOTAL_BALANCE_ASC' | 'TOTAL_BALANCE_DESC';
+}
+
+/**
  * Interface defining the contract for balance data access.
  * Implementations of this interface handle the details of retrieving
  * balance data from specific storage mechanisms (e.g., database or blockchain node).
@@ -174,6 +182,18 @@ export default interface BalanceRepository {
       chainId: string;
       balance: string;
     }>[];
+  }>;
+
+  /**
+   * Retrieves top fungible accounts sorted by total balance with pagination.
+   *
+   * @param params - Pagination and sorting parameters
+   * @returns Promise resolving to paginated fungible account results
+   */
+  getTopFungibleAccounts(params: GetTopFungibleAccountsParams): Promise<{
+    pageInfo: PageInfo;
+    edges: ConnectionEdge<FungibleAccountOutput>[];
+    totalCount: number;
   }>;
 
   /**
