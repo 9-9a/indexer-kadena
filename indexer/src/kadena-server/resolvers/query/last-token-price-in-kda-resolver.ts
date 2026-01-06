@@ -8,8 +8,11 @@ export const lastTokenPriceInKdaQueryResolver: QueryResolvers<ResolverContext>['
     const query = `
       SELECT t.result
       FROM public."Transactions" t
-      WHERE t.result::text LIKE '%' || $1 || '%'
-      ORDER BY t.creationtime DESC, t.id DESC
+      JOIN public."TransactionDetails" td ON td."transactionId" = t.id
+      WHERE td.code LIKE '%[' || $1 || ' coin]%'
+      AND t.result::text LIKE '%' || '"token": "' || $1 || '"' || '%'
+      AND t.result::text LIKE '%' || '"status": "success"' || '%'
+      ORDER BY td.id DESC
       LIMIT 1
     `;
 
