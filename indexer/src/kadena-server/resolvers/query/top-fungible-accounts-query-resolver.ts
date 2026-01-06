@@ -38,7 +38,7 @@ export const topFungibleAccountsQueryResolver: QueryResolvers<ResolverContext>['
     return {
       edges: result.edges.map(edge => ({
         cursor: edge.cursor,
-        node: buildFungibleAccount(edge.node),
+        node: buildFungibleAccount(edge.node)!,
       })),
       pageInfo: result.pageInfo,
       totalCount: result.totalCount,
