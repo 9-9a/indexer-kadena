@@ -699,7 +699,7 @@ export default class BalanceDbRepository implements BalanceRepository {
         total_balance,
         ROW_NUMBER() OVER (ORDER BY total_balance ${direction}, account ${direction}) as row_num
       FROM account_totals
-      WHERE total_balance > 0
+      WHERE 1=1
         ${afterCondition}
         ${beforeCondition}
       ORDER BY total_balance ${direction}, account ${direction}
@@ -718,17 +718,9 @@ export default class BalanceDbRepository implements BalanceRepository {
         FROM "Balances" b
         WHERE ${conditions.join(' AND ')}
         ORDER BY b.account, b."chainId", b.id DESC
-      ),
-      account_totals AS (
-        SELECT
-          account,
-          SUM(balance::numeric) as total_balance
-        FROM latest_balances
-        GROUP BY account
       )
-      SELECT COUNT(*) as count
-      FROM account_totals
-      WHERE total_balance > 0
+      SELECT COUNT(DISTINCT account) as count
+      FROM latest_balances
     `;
 
     const { rows: countRows } = await rootPgPool.query(countQuery, [fungibleName]);
