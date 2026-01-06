@@ -18,6 +18,7 @@ import { program } from 'commander';
 import { startGraphqlServer } from './kadena-server/server';
 import { startStreaming } from './services/streaming';
 import { backfillPairEvents } from './services/pair';
+import { syncBalances } from './services/sync-balances';
 import { setupAssociations } from './models/setup-associations';
 import { PriceUpdaterService } from '@/services/price/price-updater.service';
 import { initializeMemoryMonitoring } from '@/utils/memory-usage';
@@ -29,7 +30,8 @@ import { initializeMemoryMonitoring } from '@/utils/memory-usage';
 program
   .option('-s, --streaming', 'Start streaming blockchain data')
   .option('-t, --graphql', 'Start GraphQL server based on kadena schema')
-  .option('-p, --backfillPairs', 'Backfill the pairs');
+  .option('-p, --backfillPairs', 'Backfill the pairs')
+  .option('-b, --syncBalances', 'Sync balance values from blockchain to database');
 
 program.parse(process.argv);
 
@@ -62,6 +64,10 @@ async function main() {
       await startGraphqlServer();
     } else if (options.backfillPairs) {
       await backfillPairEvents();
+    } else if (options.syncBalances) {
+      await syncBalances();
+      console.info('[INFO][BIZ][BIZ_FLOW] Balance sync completed. Exiting...');
+      process.exit(0);
     } else {
       console.info('[INFO][BIZ][BIZ_FLOW] No specific task requested.');
     }
