@@ -465,7 +465,7 @@ export default class BalanceDbRepository implements BalanceRepository {
     });
 
     const pageInfo = getPageInfo({ edges, order, limit, after, before });
-    return pageInfo;
+    return { pageInfo: pageInfo.pageInfo, edges };
   }
 
   /**
