@@ -251,6 +251,18 @@ type Query {
   ): [FungibleChainAccount!]! @complexity(value: 1)
 
   """
+  Retrieve top fungible accounts sorted by total balance. Default page size is 20.
+  """
+  topFungibleAccounts(
+    after: String
+    before: String
+    first: Int
+    last: Int
+    fungibleName: String = "coin"
+    orderBy: FungibleAccountOrderBy = TOTAL_BALANCE_DESC
+  ): QueryTopFungibleAccountsConnection! @complexity(value: 1, multipliers: ["first", "last"])
+
+  """
   Estimate the gas limit for one or more transactions. Throws an error when the transaction fails or is invalid. The input accepts a JSON object and based on the parameters passed it will determine what type of format it is and return the gas limit estimation. The following types are supported:
          
         - `full-transaction`: A complete transaction object. Required parameters: `cmd`, `hash` and `sigs`.
@@ -492,6 +504,17 @@ type BalanceNode {
   module: String!
   chainId: String!
   balance: String!
+}
+
+type QueryTopFungibleAccountsConnection {
+  edges: [QueryTopFungibleAccountsConnectionEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type QueryTopFungibleAccountsConnectionEdge {
+  cursor: String!
+  node: FungibleAccount!
 }
 
 """
@@ -1401,6 +1424,11 @@ type QueryPoolsConnectionEdge {
 """
 Sort options for pools
 """
+enum FungibleAccountOrderBy {
+  TOTAL_BALANCE_ASC
+  TOTAL_BALANCE_DESC
+}
+
 enum PoolOrderBy {
   TVL_USD_ASC
   TVL_USD_DESC

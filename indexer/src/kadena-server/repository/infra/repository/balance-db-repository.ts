@@ -19,6 +19,7 @@ import BalanceRepository, {
   FungibleAccountOutput,
   FungibleChainAccountOutput,
   GetTokensParams,
+  GetTopFungibleAccountsParams,
   INonFungibleAccount,
   INonFungibleChainAccount,
   INonFungibleTokenBalance,
@@ -640,5 +641,109 @@ export default class BalanceDbRepository implements BalanceRepository {
     });
 
     return Promise.all(accountsPromises);
+  }
+
+  /**
+   * Retrieves top fungible accounts sorted by total balance with pagination.
+   */
+  async getTopFungibleAccounts(
+    params: GetTopFungibleAccountsParams,
+  ): Promise<{
+    pageInfo: import('../../../config/graphql-types').PageInfo;
+    edges: import('../../types').ConnectionEdge<FungibleAccountOutput>[];
+    totalCount: number;
+  }> {
+    const { fungibleName = 'coin', orderBy = 'TOTAL_BALANCE_DESC' } = params;
+    const { limit, order, after, before } = getPaginationParams(params);
+
+    // Map orderBy to SQL direction
+    const direction = orderBy === 'TOTAL_BALANCE_ASC' ? 'ASC' : 'DESC';
+
+    // Build WHERE conditions
+    const conditions = ['b.module = $1', 'b."hasTokenId" = false'];
+    const queryParams: any[] = [fungibleName, limit];
+
+    let afterCondition = '';
+    let beforeCondition = '';
+
+    if (after) {
+      queryParams.push(after);
+      afterCondition = `AND total_balance ${order === 'DESC' ? '<' : '>'} $${queryParams.length}`;
+    }
+
+    if (before) {
+      queryParams.push(before);
+      beforeCondition = `AND total_balance ${order === 'DESC' ? '>' : '<'} $${queryParams.length}`;
+    }
+
+    // Query to get top accounts with aggregated balances
+    const query = `
+      WITH latest_balances AS (
+        SELECT DISTINCT ON (b.account, b."chainId")
+          b.account,
+          b."chainId",
+          b.balance
+        FROM "Balances" b
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY b.account, b."chainId", b.id DESC
+      ),
+      account_totals AS (
+        SELECT
+          account,
+          SUM(balance::numeric) as total_balance
+        FROM latest_balances
+        GROUP BY account
+      )
+      SELECT
+        account,
+        total_balance,
+        ROW_NUMBER() OVER (ORDER BY total_balance ${direction}, account ${direction}) as row_num
+      FROM account_totals
+      WHERE 1=1
+        ${afterCondition}
+        ${beforeCondition}
+      ORDER BY total_balance ${direction}, account ${direction}
+      LIMIT $2
+    `;
+
+    const { rows } = await rootPgPool.query(query, queryParams);
+
+    // Get total count
+    const countQuery = `
+      WITH latest_balances AS (
+        SELECT DISTINCT ON (b.account, b."chainId")
+          b.account,
+          b."chainId",
+          b.balance
+        FROM "Balances" b
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY b.account, b."chainId", b.id DESC
+      )
+      SELECT COUNT(DISTINCT account) as count
+      FROM latest_balances
+    `;
+
+    const { rows: countRows } = await rootPgPool.query(countQuery, [fungibleName]);
+    const totalCount = parseInt(countRows[0]?.count || '0');
+
+    // Build edges with account data
+    const edges = rows.map((row: any) => ({
+      cursor: row.total_balance.toString(),
+      node: fungibleAccountValidator.validate({
+        account: row.account,
+        module: fungibleName,
+        totalBalance: parseFloat(row.total_balance),
+      }),
+    }));
+
+    const pageInfo = getPageInfo({
+      order,
+      limit,
+      edges,
+      after,
+      before,
+    }).pageInfo;
+
+    return { pageInfo, edges, totalCount };
   }
 }
