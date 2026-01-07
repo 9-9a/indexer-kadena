@@ -51,6 +51,7 @@ import {
 } from 'graphql-query-complexity';
 import { depthLimit } from '@graphile/depth-limit';
 import { createSentryPlugin } from './plugins/sentry-plugin';
+import { syncRecentBalances } from '../services/sync-recent-balances';
 
 /**
  * Maximum allowed complexity for GraphQL queries
@@ -82,6 +83,25 @@ const typeDefs = readFileSync(join(__dirname, './config/schema.graphql'), 'utf-8
  * The port on which the GraphQL API will listen
  */
 const KADENA_GRAPHQL_API_PORT = process.env.KADENA_GRAPHQL_API_PORT ?? '3001';
+
+/**
+ * Interval in milliseconds for syncing recently modified balances
+ * Default: 300000ms (5 minutes)
+ * Set to 0 to disable automatic syncing
+ */
+const BALANCE_SYNC_INTERVAL_MS = parseInt(
+  process.env.BALANCE_SYNC_INTERVAL_MS ?? '300000',
+  10,
+);
+
+/**
+ * How many minutes back to look for recently modified balances
+ * Default: 10 minutes (ensures overlap to catch any missed updates)
+ */
+const BALANCE_SYNC_LOOKBACK_MINUTES = parseInt(
+  process.env.BALANCE_SYNC_LOOKBACK_MINUTES ?? '10',
+  10,
+);
 
 /**
  * Apollo Server plugin that validates pagination parameters in GraphQL requests
@@ -513,7 +533,32 @@ export async function startGraphqlServer() {
   await initCache(context);
   await new Promise<void>(resolve => httpServer.listen({ port: KADENA_GRAPHQL_API_PORT }, resolve));
   console.info(`[INFO][API][BIZ_FLOW] GraphQL server started on port ${KADENA_GRAPHQL_API_PORT}.`);
-  console.info(
-    '[INFO][WORKER][BIZ_FLOW] Balance updates are handled automatically by the streaming service.',
-  );
+
+  // Start automatic balance synchronization for recently modified accounts
+  if (BALANCE_SYNC_INTERVAL_MS > 0) {
+    console.info(
+      `[INFO][WORKER][BIZ_FLOW] Starting automatic balance sync every ${BALANCE_SYNC_INTERVAL_MS / 1000 / 60} minutes ` +
+        `(lookback: ${BALANCE_SYNC_LOOKBACK_MINUTES} minutes)`,
+    );
+
+    // Run initial sync after a short delay
+    setTimeout(async () => {
+      try {
+        await syncRecentBalances(BALANCE_SYNC_LOOKBACK_MINUTES);
+      } catch (error) {
+        console.error('[ERROR][WORKER][BIZ_FLOW] Initial balance sync failed:', error);
+      }
+    }, 30000); // Wait 30 seconds after server start
+
+    // Schedule periodic syncs
+    setInterval(async () => {
+      try {
+        await syncRecentBalances(BALANCE_SYNC_LOOKBACK_MINUTES);
+      } catch (error) {
+        console.error('[ERROR][WORKER][BIZ_FLOW] Scheduled balance sync failed:', error);
+      }
+    }, BALANCE_SYNC_INTERVAL_MS);
+  } else {
+    console.info('[INFO][WORKER][BIZ_FLOW] Automatic balance sync is disabled (BALANCE_SYNC_INTERVAL_MS=0)');
+  }
 }

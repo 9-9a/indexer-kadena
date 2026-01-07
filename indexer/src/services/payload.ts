@@ -23,15 +23,13 @@ import { Op, Transaction } from 'sequelize';
 import Signer from '@/models/signer';
 import Guard from '@/models/guard';
 import { handleSingleQuery } from '@/utils/raw-query';
-import { sequelize, rootPgPool } from '@/config/database';
+import { sequelize } from '@/config/database';
 import { addCoinbaseTransactions } from './coinbase';
 import TransactionDetails, { TransactionDetailsAttributes } from '@/models/transaction-details';
 import { mapToEventModel } from '@/models/mappers/event-mapper';
 import { processPairCreationEvents } from './pair';
 import { Decimal } from 'decimal.js';
 import { increaseCounters } from '@/services/counters';
-import pLimit from 'p-limit';
-import { formatBalance_NODE } from '@/utils/chainweb-node';
 
 // Constants for array indices in the transaction data structure
 const TRANSACTION_INDEX = 0;
@@ -327,8 +325,17 @@ export async function processTransaction(
       };
     }
 
+    // Deduplicate balances based on unique constraint (chainId, account, module, tokenId)
+    // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" error
+    const balanceMap = new Map<string, typeof balances[0]>();
+    for (const balance of balances) {
+      const key = `${balance.chainId}:${balance.account}:${balance.module}:${balance.tokenId}`;
+      balanceMap.set(key, balance);
+    }
+    const uniqueBalances = Array.from(balanceMap.values());
+
     // Create values string for SQL insert
-    const values = balances
+    const values = uniqueBalances
       .map(
         balance =>
           `(${balance.chainId}, '${balance.account}', '${balance.module}', '${balance.tokenId}', ${balance.hasTokenId}, NOW(), NOW())`,
@@ -342,22 +349,11 @@ export async function processTransaction(
       VALUES ${values}
       ON CONFLICT ("chainId", account, module, "tokenId") DO UPDATE
       SET "updatedAt" = NOW()
-      RETURNING id, "chainId", account, module, "hasTokenId", "tokenId"
     `;
 
-    const [insertResults] = await sequelize.query(newBalancesQuery, {
+    await sequelize.query(newBalancesQuery, {
       transaction: tx,
     });
-
-    // Schedule background balance updates for fungible tokens (not NFTs)
-    // This runs after the transaction commits to avoid slowing down the streaming
-    if (insertResults && Array.isArray(insertResults) && insertResults.length > 0) {
-      setImmediate(() => {
-        updateBalancesInBackground(insertResults as any[]).catch(err => {
-          console.error('[ERROR][WORKER][BIZ_FLOW] Background balance update failed:', err);
-        });
-      });
-    }
 
     return {
       events: eventsWithTransactionId,
@@ -438,63 +434,4 @@ export async function getGuardsFromBalances(balances: BalanceInsertResult[]) {
     }));
 
   return filteredGuards;
-}
-
-/**
- * Updates balance values in the background for recently modified balances
- *
- * This function queries the blockchain node for current balance values and updates
- * the database. It runs asynchronously to avoid blocking the main streaming process.
- *
- * @param balances - Array of balance records to update
- */
-const balanceUpdateLimit = pLimit(20); // Limit concurrent blockchain queries
-
-async function updateBalancesInBackground(
-  balances: Array<{
-    id: number;
-    chainId: number;
-    account: string;
-    module: string;
-    hasTokenId: boolean;
-    tokenId: string;
-  }>,
-) {
-  // Only update fungible tokens (skip NFTs)
-  const fungibleBalances = balances.filter(b => !b.hasTokenId);
-
-  if (fungibleBalances.length === 0) return;
-
-  // Query balances from the blockchain with controlled concurrency
-  const updatePromises = fungibleBalances.map(balance =>
-    balanceUpdateLimit(async () => {
-      try {
-        const res = await handleSingleQuery({
-          chainId: balance.chainId.toString(),
-          code: `(${balance.module}.details "${balance.account}")`,
-        });
-
-        if (res.status !== 'success' || !res.result) return null;
-
-        const balanceValue = formatBalance_NODE(res);
-
-        // Update the balance in the database
-        await rootPgPool.query(
-          `UPDATE "Balances" SET balance = $1, "updatedAt" = NOW() WHERE id = $2`,
-          [balanceValue.toString(), balance.id],
-        );
-
-        return balance.id;
-      } catch (error) {
-        // Log error but don't fail the entire batch
-        console.error(
-          `[ERROR][WORKER][BIZ_FLOW] Failed to update balance for account ${balance.account} on chain ${balance.chainId}:`,
-          error,
-        );
-        return null;
-      }
-    }),
-  );
-
-  await Promise.all(updatePromises);
 }
