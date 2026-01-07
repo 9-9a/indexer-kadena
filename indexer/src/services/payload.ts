@@ -325,8 +325,17 @@ export async function processTransaction(
       };
     }
 
+    // Deduplicate balances based on unique constraint (chainId, account, module, tokenId)
+    // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" error
+    const balanceMap = new Map<string, typeof balances[0]>();
+    for (const balance of balances) {
+      const key = `${balance.chainId}:${balance.account}:${balance.module}:${balance.tokenId}`;
+      balanceMap.set(key, balance);
+    }
+    const uniqueBalances = Array.from(balanceMap.values());
+
     // Create values string for SQL insert
-    const values = balances
+    const values = uniqueBalances
       .map(
         balance =>
           `(${balance.chainId}, '${balance.account}', '${balance.module}', '${balance.tokenId}', ${balance.hasTokenId}, NOW(), NOW())`,
@@ -338,7 +347,8 @@ export async function processTransaction(
     const newBalancesQuery = `
       INSERT INTO "Balances" ("chainId", account, module, "tokenId", "hasTokenId", "createdAt", "updatedAt")
       VALUES ${values}
-      ON CONFLICT ("chainId", account, module, "tokenId") DO NOTHING
+      ON CONFLICT ("chainId", account, module, "tokenId") DO UPDATE
+      SET "updatedAt" = NOW()
     `;
 
     await sequelize.query(newBalancesQuery, {

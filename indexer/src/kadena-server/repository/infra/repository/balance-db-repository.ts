@@ -465,7 +465,7 @@ export default class BalanceDbRepository implements BalanceRepository {
     });
 
     const pageInfo = getPageInfo({ edges, order, limit, after, before });
-    return pageInfo;
+    return { pageInfo: pageInfo.pageInfo, edges };
   }
 
   /**
@@ -729,21 +729,23 @@ export default class BalanceDbRepository implements BalanceRepository {
     // Build edges with account data
     const edges = rows.map((row: any) => ({
       cursor: row.total_balance.toString(),
-      node: fungibleAccountValidator.validate({
-        account: row.account,
-        module: fungibleName,
-        totalBalance: parseFloat(row.total_balance),
-      }),
+      node: {
+        ...fungibleAccountValidator.validate({
+          account: row.account,
+          module: fungibleName,
+        }),
+        totalBalance: row.total_balance.toString(),
+      },
     }));
 
-    const pageInfo = getPageInfo({
+    const { pageInfo, edges: processedEdges } = getPageInfo({
       order,
       limit,
       edges,
       after,
       before,
-    }).pageInfo;
+    });
 
-    return { pageInfo, edges, totalCount };
+    return { pageInfo, edges: processedEdges, totalCount };
   }
 }
