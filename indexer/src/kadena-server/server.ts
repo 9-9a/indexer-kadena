@@ -513,4 +513,7 @@ export async function startGraphqlServer() {
   await initCache(context);
   await new Promise<void>(resolve => httpServer.listen({ port: KADENA_GRAPHQL_API_PORT }, resolve));
   console.info(`[INFO][API][BIZ_FLOW] GraphQL server started on port ${KADENA_GRAPHQL_API_PORT}.`);
+  console.info(
+    '[INFO][WORKER][BIZ_FLOW] Balance updates are handled automatically by the streaming service.',
+  );
 }

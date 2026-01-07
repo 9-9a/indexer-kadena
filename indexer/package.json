@@ -76,6 +76,7 @@
     "dev:backfillPairs": "ts-node -r tsconfig-paths/register src/index.ts --backfillPairs",
     "dev:streaming": "ts-node -r tsconfig-paths/register src/index.ts --streaming",
     "dev:graphql": "ts-node -r tsconfig-paths/register src/index.ts --graphql",
+    "dev:syncBalances": "ts-node -r tsconfig-paths/register src/index.ts --syncBalances",
     "dev:hot:graphql": "nodemon --exec ts-node -r tsconfig-paths/register src/index.ts --graphql",
     "graphql:generate-types": "npx graphql-codegen",
     "migrate:up": "ts-node -r tsconfig-paths/register src/config/migrator-wrapper.ts",
