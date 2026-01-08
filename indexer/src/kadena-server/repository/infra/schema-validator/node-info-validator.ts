@@ -29,7 +29,7 @@ const schema = zod.object({
   nodeNumberOfChains: zod.number(),
   nodeGenesisHeights: zod.array(zod.tuple([zod.string(), zod.number()])),
   nodePackageVersion: zod.string(),
-  nodeServiceDate: zod.string().nullable(),
+  nodeServiceDate: zod.string().nullish(), // allows string | null | undefined
   nodeLatestBehaviorHeight: zod.number(),
   nodeGraphHistory: zod.any(),
   nodeHistoricalChains: zod.any(),
